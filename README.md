@@ -10,7 +10,7 @@ This template is one part of the broader **NgpCraft** project. Already available
 - [NGPC_sound_driver_custom](https://github.com/Tixul/NGPC_sound_driver_custom), the custom sound driver used by the audio pipeline and already included in this template
 
 Other NgpCraft tools are planned and will follow.
-
+example of games developed with https://github.com/Tixul/Stargunner/tree/main
 **License:** MIT (use it for anything, commercial or not)
 
 ---
