@@ -1,68 +1,40 @@
 $MAXIMUM
 
 ;
-; ngpc_flash_asm.asm - Flash erase and write (pure TLCS-900/H assembly)
+; ngpc_flash_asm.asm - Standalone flash save (no system.lib)
 ;
 ; Part of NgpCraft_base_template (MIT License)
 ;
-; ═══════════════════════════════════════════════════════════════════
-; FLASH TARGET
-; ═══════════════════════════════════════════════════════════════════
+; This file replaces the system.lib-dependent version.
+; It embeds the flash programming stubs extracted from StarGunner (hardware-validated)
+; and implements the full call mechanism found by disassembly of WRITE_FLASH_RAM /
+; CLR_FLASH_RAM (system.lib internals):
 ;
-;   Block 33 (F16_B33)  offset 0x1FA000  size 8 KB
-;   Used as 32 append-only slots x 256 bytes each.
-;   SAVE_SIZE = 256 bytes  =>  rbc3 = 1  (BIOS writes in units of 256)
+;   1. ld (0x6E),0x14      — enable /WE on cartridge bus (CRITICAL: never set manually)
+;   2. ld (0x6F),0xB1      — watchdog extended mode for long BIOS-equivalent operation
+;   3. Copy stub bytes to RAM 0x6E00 (mandatory: cannot execute from the flash chip itself)
+;   4. Set XIX=0x200000, XDE=abs_dest, XHL=src, BC=pages   (or XDE=block, XIY/A=0 for erase)
+;   5. call 0x6E00         — execute AMD sequence from RAM
+;   6. ld (0x6F),0x4E / ld (0x6E),0xF0  — restore watchdog + bus
 ;
-;   If you change SAVE_SIZE to 512, set rbc3 = 2 in _ngpc_flash_write_asm.
-;   NUM_SLOTS = 8192 / SAVE_SIZE must remain >= 1.
+; Flash target: block 33 (F16_B33, 8KB, absolute 0x3FA000).
 ;
-; ═══════════════════════════════════════════════════════════════════
-; WHY CLR_FLASH_RAM (not VECT_FLASHERS, not manual Sharp commands)
-; ═══════════════════════════════════════════════════════════════════
+; Default SAVE_SIZE = 256 bytes -> BC = 1.
+; If you change SAVE_SIZE to 512: set  ld bc,0x0002  below and update SAVE_SIZE in
+; ngpc_flash.h  (NUM_SLOTS = 8192 / SAVE_SIZE must remain >= 1).
 ;
-;  VECT_FLASHERS:  BIOS bug confirmed on production hardware
-;                  (SysCall.txt p.299) — silently fails for blocks
-;                  32, 33, 34 on 16Mbit carts.  Must use CLR_FLASH_RAM.
+; Stub byte sources (from StarGunner/bin/main.ngp, hardware-validated):
+;   Write stub : 115 bytes at ROM file offset 0x13517  (ROM addr 0x213517)
+;   Erase stub :  98 bytes at ROM file offset 0x13733  (ROM addr 0x213733)
 ;
-;  Manual erase:   Direct writes to cart ROM area are no-ops.
-;                  User code cannot assert /WE on the cart bus; only
-;                  BIOS/system.lib can.  Evidence: ldb (xde),0x20 with
-;                  xde=0x3FA000 is silently ignored.  The subsequent
-;                  `bit 7,(xde)` reads 0xCA (real flash data; bit 7=1)
-;                  and exits immediately — the chip never entered
-;                  erase mode.  Confirmed across 3 separate attempts
-;                  (essais 10, 15, 16 in FLASH_SAVE_RESEARCH.md).
+; Stub register interface (current bank, bank-0):
+;   Write: XIX=0x200000  XHL=src_ptr  XDE=abs_flash_dest  BC=0x0001 (1x256=256B)
+;   Erase: XIX=0x200000  XIY=0        A=0                 XDE=0x3FA000 (block 33)
 ;
-;  CLR_FLASH_RAM:  The documented workaround (SysLib.txt).
-;                  Reliable on the FIRST call per power-on session.
-;                  Silently fails on the 2nd call (hardware bug; no
-;                  source available for system.lib).
-;                  Append-only slots ensure it is NEVER called twice
-;                  per session: erase only triggers when all 32 slots
-;                  are used, which requires 32 saves without power
-;                  cycle — impossible in normal gameplay.
-;
-; ═══════════════════════════════════════════════════════════════════
-; WHY ld xde,(xsp+8) + ld xde3,xde  (NOT ld xde3,(xsp+8))
-; ═══════════════════════════════════════════════════════════════════
-;
-;  asm900 Error-230 "Operand type mismatch": stack-relative addressing
-;  (xsp+disp) is NOT encodable with bank-3 extended registers.
-;  Workaround: two-step load — identical pattern to the XHL3 case:
-;
-;      ld  xhl,(xsp+4)    ; stack-rel to primary XHL   (valid)
-;      ld  xhl3,xhl       ; primary to bank-3           (valid)
-;
-;      ld  xde,(xsp+8)    ; stack-rel to primary XDE   (valid)
-;      ld  xde3,xde       ; primary to bank-3           (valid)
-;
-; ═══════════════════════════════════════════════════════════════════
-; cc900 ABI (TLCS-900/H CALL pushes 4-byte XPC as return address)
-; ═══════════════════════════════════════════════════════════════════
-;
-;   (xsp+0)..(xsp+3)   = return address       (4 bytes, pushed by CALL)
-;   (xsp+4)..(xsp+7)   = 1st parameter        (pushed as 4-byte XWA)
-;   (xsp+8)..(xsp+11)  = 2nd parameter        (pushed as 4-byte XWA)
+; cc900 ABI (CALL pushes 4-byte XPC as return address):
+;   (xsp+0)..(xsp+3) = return address
+;   (xsp+4)..(xsp+7) = 1st parameter  (pushed as 4-byte XWA via lda/push)
+;   (xsp+8)..(xsp+11)= 2nd parameter  (same)
 ;
 
         module  ngpc_flash_asm
@@ -70,74 +42,126 @@ $MAXIMUM
         public  _ngpc_flash_erase_asm
         public  _ngpc_flash_write_asm
 
-        extern  large CLR_FLASH_RAM     ; system.lib: erase blocks 32/33/34
-        extern  large WRITE_FLASH_RAM   ; system.lib: write (= VECT_FLASHWRITE)
+FLASH_RAM       equ     0x6E00          ; RAM address for stub execution
+FLASH_BUS_CTRL  equ     0x6E            ; I/O: flash /WE enable (0x14=on, 0xF0=off)
+FLASH_WD        equ     0x6F            ; I/O: watchdog  (0xB1=extended, 0x4E=normal)
+CART_BASE       equ     0x200000        ; CS0 base address
+FLASH_BLK33     equ     0x3FA000        ; Block 33 absolute address (0x200000+0x1FA000)
 
 FLASH   section code large
 
-; ── _ngpc_flash_erase_asm ───────────────────────────────────────────
-;
-; Erases block 33 (F16_B33, 8 KB) using CLR_FLASH_RAM (system.lib).
-;
-; Called ONLY when all 32 append-only slots are exhausted.  In practice
-; this requires 32 writes without a power cycle, which does not happen
-; under normal gameplay.  Therefore this is ALWAYS the first
-; CLR_FLASH_RAM call of the session -> guaranteed to succeed.
-;
-; CLR_FLASH_RAM parameters (register bank 3):
-;   RA3 = cart select (0 = CS0, base address 0x200000)
-;   RB3 = block number (0x21 = 33 = F16_B33)
-;
-; BIOS does DI for the duration of the erase.  The watchdog is cleared
-; before and after the call; the erase takes ~5-15 ms (8 KB block),
-; well within the ~100 ms watchdog period.
-;
-; No parameters.
-; C prototype: void ngpc_flash_erase_asm(void);
-;
+
+; ===========================================================================
+; _ngpc_flash_erase_asm
+; Erases block 33 (F16_B33, 8KB) using the extracted AMD erase stub.
+; Called only when all append-only slots are full (~once per 16 saves).
+; No parameters.  C prototype: void ngpc_flash_erase_asm(void);
+; ===========================================================================
 _ngpc_flash_erase_asm:
-        ld      ra3,0           ; cart 0 = CS0 (base 0x200000)
-        ld      rb3,0x21        ; block 33 = F16_B33
-        ld      (0x6f),0x4e     ; clear watchdog before BIOS call
-        calr    CLR_FLASH_RAM   ; erase block 33
-        ld      (0x6f),0x4e     ; clear watchdog after
+
+        ld      (FLASH_BUS_CTRL),0x14   ; enable /WE on cart bus
+        ld      (FLASH_WD),0xB1         ; watchdog: extended mode
+
+        ; Copy erase stub (98 bytes) from ROM to RAM at FLASH_RAM
+        push    xbc                     ; preserve XBC across copy
+        ld      xde,FLASH_RAM           ; destination: RAM
+        ld      xhl,_erase_stub         ; source: stub bytes in ROM
+        ld      bc,0x62                 ; BC = 98 bytes
+        db      0x83,0x11               ; ldir (xde+),(xhl+) -- copy BC bytes
+        pop     xbc                     ; restore XBC
+
+        ; Set up registers for stub call
+        ld      xix,CART_BASE           ; XIX = 0x200000 (AMD unlock base)
+        ld      xiy,0x0                 ; XIY = 0 (erase stub uses as delay counter)
+        ld      a,0x0                   ; A = 0 (erase stub state init)
+        ld      xde,FLASH_BLK33         ; XDE = 0x3FA000 (block 33 to erase)
+
+        call    FLASH_RAM               ; execute stub from RAM
+
+        ld      (FLASH_WD),0x4E         ; restore watchdog
+        ld      (FLASH_BUS_CTRL),0xF0   ; disable /WE
         ret
 
-; ── _ngpc_flash_write_asm ───────────────────────────────────────────
-;
-; Writes SAVE_SIZE (256) bytes from 'data' to flash at 'offset'.
-; The offset is pre-computed by the C caller:
-;     offset = 0x1FA000 + slot_index * SAVE_SIZE
-;
-; WRITE_FLASH_RAM parameters (register bank 3):
-;   RA3  = cart select  (0 = CS0 = 0x200000)
-;   RBC3 = transfer count, in units of 256 bytes
-;          1 = 256 bytes = SAVE_SIZE (default, for SAVE_SIZE=256)
-;          2 = 512 bytes (use if SAVE_SIZE is changed to 512)
-;   XHL3 = source address in RAM (pointer to the data buffer)
-;   XDE3 = destination offset; WRITE_FLASH_RAM adds 0x200000 internally
-;          e.g. 0x1FA000 for slot 0, 0x1FA100 for slot 1, etc.
-;
+
+; ===========================================================================
+; _ngpc_flash_write_asm
+; Writes 512 bytes from data to the flash slot at the given absolute offset.
 ; Parameters:
-;   (xsp+4)   = data   : const void *  (source RAM buffer)
-;   (xsp+8)   = offset : u32           (flash destination offset)
-;
-; NOTE: ld xde3,(xsp+8) is NOT valid (asm900 Error-230).
-;       Use: ld xde,(xsp+8)  then  ld xde3,xde  (two-step, see header).
-;
+;   (xsp+4)  = data:   source address (const void *)
+;   (xsp+8)  = offset: flash dest relative to cart base (u32, e.g. 0x1FA000 + slot*256)
 ; C prototype: void ngpc_flash_write_asm(const void *data, u32 offset);
-;
+; ===========================================================================
 _ngpc_flash_write_asm:
-        ld      ra3,0           ; cart 0 = CS0
-        ld      rbc3,1          ; 1 x 256 = 256 bytes (= SAVE_SIZE)
-                                ; NOTE: change to rbc3,2 if SAVE_SIZE=512
-        ld      xhl,(xsp+4)     ; 1st param: source pointer -> primary XHL
-        ld      xhl3,xhl        ; promote to bank-3 for BIOS
-        ld      xde,(xsp+8)     ; 2nd param: flash offset -> primary XDE
-        ld      xde3,xde        ; promote to bank-3 for BIOS
-        ld      (0x6f),0x4e     ; clear watchdog before write
-        calr    WRITE_FLASH_RAM ; write SAVE_SIZE bytes
-        ld      (0x6f),0x4e     ; clear watchdog after
+
+        ld      (FLASH_BUS_CTRL),0x14   ; enable /WE on cart bus
+        ld      (FLASH_WD),0xB1         ; watchdog: extended mode
+
+        ; Load parameters from C stack (before any pushes change offsets)
+        ld      xhl,(xsp+4)             ; 1st param: source pointer
+        ld      xde,(xsp+8)             ; 2nd param: flash offset (relative, e.g. 0x1FA000+slot*512)
+        ld      xix,CART_BASE           ; XIX = 0x200000 (also needed for AMD sequences)
+        add     xde,xix                 ; XDE = offset + 0x200000 = absolute flash dest (0x3FA000+...)
+
+        ; Preserve abs_dest/src across LDIR copy
+        push    xde                     ; save flash abs dest
+        push    xhl                     ; save src pointer
+
+        ; Copy write stub (115 bytes) from ROM to RAM at FLASH_RAM
+        ld      xde,FLASH_RAM           ; destination: RAM
+        ld      xhl,_write_stub         ; source: stub bytes in ROM
+        ld      bc,0x73                 ; BC = 115 bytes
+        db      0x83,0x11               ; ldir (xde+),(xhl+) -- copy BC bytes
+
+        ; Restore src/dest pointers
+        pop     xhl                     ; source data pointer
+        pop     xde                     ; flash absolute destination
+
+        ; Set up remaining registers for stub call (XIX already set above)
+        ld      bc,0x0001               ; BC = 1 page x 256 = 256 bytes  (change to 0x0002 if SAVE_SIZE=512)
+
+        call    FLASH_RAM               ; execute stub from RAM
+
+        ld      (FLASH_WD),0x4E         ; restore watchdog
+        ld      (FLASH_BUS_CTRL),0xF0   ; disable /WE
         ret
+
+
+; ===========================================================================
+; Flash stub byte tables
+; Extracted from StarGunner/bin/main.ngp (hardware-validated on real flash cart).
+; These are position-independent stubs — they use XIX for AMD bus cycles.
+;
+; Write stub  (115 bytes, file offset 0x13517):
+;   AMD unlock → reset → unlock again → byte-program sequence → poll DQ7/DQ5 loop
+;   Register interface: XIX=cart_base XHL=src XDE=dest BC=pages(1 for default 256B)
+;
+; Erase stub  (98 bytes, file offset 0x13733):
+;   AMD unlock → reset → unlock → erase setup (0x80) → unlock → sector erase (0x30)
+;   Poll DQ7 loop → final reset/unlock → ret
+;   Register interface: XIX=cart_base XDE=block_addr XIY=0 A=0
+; ===========================================================================
+
+_write_stub:
+        db      0xF3,0xF1,0x55,0x55,0x00,0xAA, 0xF3,0xF1,0xAA,0x2A,0x00,0x55
+        db      0xF3,0xF1,0x55,0x55,0x00,0xF0, 0xD7,0xE6,0xA8,0xE9,0xEC,0x08
+        db      0x21,0x00,0xC5,0xEC,0x20,0xED, 0xA8,0x1E,0x24,0x00,0xEA,0x61
+        db      0xC9,0xCF,0xFF,0x66,0x0A,0xE9, 0x69,0xE9,0xCF,0x00,0x00,0x00
+        db      0x00,0x6E,0xE7,0xF3,0xF1,0x55, 0x55,0x00,0xAA,0xF3,0xF1,0xAA
+        db      0x2A,0x00,0x55,0xF3,0xF1,0x55, 0x55,0x00,0xF0,0x0E,0xF3,0xF1
+        db      0x55,0x55,0x00,0xAA,0xF3,0xF1, 0xAA,0x2A,0x00,0x55,0xF3,0xF1
+        db      0x55,0x55,0x00,0xA0,0xB2,0x40, 0x82,0xF0,0x66,0x14,0xED,0x61
+        db      0xED,0xCF,0xFF,0xFF,0x03,0x00, 0x66,0x08,0xB2,0xCD,0x66,0xEE
+        db      0x82,0xF0,0x66,0x02,0x21,0xFF, 0x0E
+
+_erase_stub:
+        db      0xF3,0xF1,0x55,0x55,0x00,0xAA, 0xF3,0xF1,0xAA,0x2A,0x00,0x55
+        db      0xF3,0xF1,0x55,0x55,0x00,0xF0, 0x00,0x00,0xF3,0xF1,0x55,0x55
+        db      0x00,0xAA,0xF3,0xF1,0xAA,0x2A, 0x00,0x55,0xF3,0xF1,0x55,0x55
+        db      0x00,0x80,0xF3,0xF1,0x55,0x55, 0x00,0xAA,0xF3,0xF1,0xAA,0x2A
+        db      0x00,0x55,0xB2,0x00,0x30,0x82, 0x3F,0xFF,0x66,0x15,0xED,0x61
+        db      0xED,0xCF,0xFF,0xFF,0x1F,0x00, 0x66,0x09,0xB2,0xCD,0x66,0xED
+        db      0x82,0x3F,0xFF,0x66,0x02,0x21, 0xFF,0xF3,0xF1,0x55,0x55,0x00
+        db      0xAA,0xF3,0xF1,0xAA,0x2A,0x00, 0x55,0xF3,0xF1,0x55,0x55,0x00
+        db      0xF0,0x0E
 
         end

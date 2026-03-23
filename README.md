@@ -15,74 +15,74 @@ Other NgpCraft tools are planned and will follow.
 
 ---
 
-## Table of Contents
+## Sommaire
 
 **Setup**
-- [Project docs](#project-docs) · [Hardware overview](#hardware-overview) · [Project structure](#project-structure) · [Prerequisites](#prerequisites) · [Build](#build)
+- [Docs du projet](#project-docs) · [Hardware overview](#hardware-overview) · [Structure du projet](#project-structure) · [Prérequis](#prerequisites) · [Build](#build)
 
-**Modules — System**
-| Module | Role | Status |
+**Modules — Système**
+| Module | Rôle | Statut |
 |---|---|---|
-| [ngpc_sys](#ngpc_sys----system) | Hardware init, VBlank, memcpy/memset | Hardware validated |
-| [ngpc_vramq](#ngpc_vramq----queued-vram-updates) | VRAM write queue (auto-flushed at VBlank) | Hardware validated |
-| [ngpc_timing](#ngpc_timing----timing) | vsync, sleep, CPU speed | Hardware validated |
-| [ngpc_input](#ngpc_input----joypad) | Joypad: held / pressed / released / repeat | Hardware validated |
-| [ngpc_flash](#ngpc_flash----save) | 256-byte save to flash cart | Hardware validated |
-| [ngpc_rtc](#ngpc_rtc----real-time-clock) | Real-time clock (BCD) | Hardware validated |
+| [ngpc_sys](#ngpc_sys----system) | Init hardware, VBlank, memcpy/memset | Valide hardware |
+| [ngpc_vramq](#ngpc_vramq----queued-vram-updates) | File d'attente VRAM (flush auto au VBlank) | Valide hardware |
+| [ngpc_timing](#ngpc_timing----timing) | vsync, sleep, vitesse CPU | Valide hardware |
+| [ngpc_input](#ngpc_input----joypad) | Joypad : held / pressed / released / repeat | Valide hardware |
+| [ngpc_flash](#ngpc_flash----save) | Sauvegarde 256 octets en flash cart | Valide hardware |
+| [ngpc_rtc](#ngpc_rtc----real-time-clock) | Horloge temps réel (BCD) | Valide hardware |
 
-**Modules — Graphics**
-| Module | Role | Status |
+**Modules — Graphismes**
+| Module | Rôle | Statut |
 |---|---|---|
-| [ngpc_gfx](#ngpc_gfx----graphics) | Tiles, tilemap, palettes, scroll, screen effects | Hardware validated |
-| [ngpc_sprite](#ngpc_sprite----sprites) | Hardware sprites (64 max, 8x8, flip, chain) | Hardware validated |
-| [ngpc_text](#ngpc_text----text) | Text/number display using the sysfont | Hardware validated |
-| [ngpc_bitmap](#ngpc_bitmap----bitmap-mode) | Emulated bitmap mode (380 tiles, direct pixels) | Hardware validated |
-| [ngpc_metasprite](#ngpc_metasprite----multi-tile-sprites) | Multi-tile sprites (up to 16 parts), animation | Hardware validated |
-| [ngpc_sprmux](#ngpc_sprmux----sprite-multiplexing) | Sprite multiplexing (>64 logical sprites) via HBlank | Abandoned |
-| [ngpc_palfx](#ngpc_palfx----palette-effects) | Fade, flash, color cycle (4 simultaneous effects) | Hardware validated |
-| [ngpc_raster](#ngpc_raster----hblank-raster-effects) | HBlank raster effects (per-line scroll, parallax) | Hardware validated |
-| [ngpc_dma](#ngpc_dma----microdma-hardware-validated) | MicroDMA — scanline tables to registers | Hardware validated |
-| [ngpc_dma_raster](#ngpc_dma_raster----raster-via-microdma) | Raster effects via MicroDMA (no CPU HBlank ISR) | Hardware validated |
+| [ngpc_gfx](#ngpc_gfx----graphics) | Tiles, tilemap, palettes, scroll, effets écran | Valide hardware |
+| [ngpc_sprite](#ngpc_sprite----sprites) | Sprites hardware (64 max, 8x8, flip, chain) | Valide hardware |
+| [ngpc_text](#ngpc_text----text) | Affichage texte/chiffres avec la sysfont | Valide hardware |
+| [ngpc_bitmap](#ngpc_bitmap----bitmap-mode) | Mode bitmap émulé (380 tiles, pixels directs) | Valide hardware |
+| [ngpc_metasprite](#ngpc_metasprite----multi-tile-sprites) | Multi-sprites (jusqu'à 16 parts), animation | Valide hardware |
+| [ngpc_sprmux](#ngpc_sprmux----sprite-multiplexing) | Multiplexage sprites (>64 logiques) via HBlank | Abandonne |
+| [ngpc_palfx](#ngpc_palfx----palette-effects) | Fade, flash, cycle couleur (4 effets simultanés) | Valide hardware |
+| [ngpc_raster](#ngpc_raster----hblank-raster-effects) | Effets raster HBlank (scroll par ligne, parallax) | Valide hardware |
+| [ngpc_dma](#ngpc_dma----microdma-hardware-validated) | MicroDMA (hardware OK) — tables scanline vers registres | Valide hardware |
+| [ngpc_dma_raster](#ngpc_dma_raster----raster-via-microdma) | Effets raster via MicroDMA (sans ISR HBlank CPU) | Valide hardware |
 
-**Modules — Utilities**
-| Module | Role | Status |
+**Modules — Utilitaires**
+| Module | Rôle | Statut |
 |---|---|---|
-| [ngpc_math](#ngpc_math----math) | Sin/cos LUT, RNG, mul32 | Hardware validated |
-| [ngpc_lut](#ngpc_lut----lookup-tables-fast-math) | atan2, sqrt, distance, fast division | Hardware validated |
-| [ngpc_lz](#ngpc_lz----tile-decompression) | RLE / LZ77 decompression to tiles | Hardware validated |
-| [ngpc_debug](#ngpc_debug----cpu-profiler) | CPU profiler (green/yellow/red bar) | Unproven |
-| [ngpc_log](#ngpc_log----ring-buffer-debug-log) | Ring buffer log (on hardware without serial) | Hardware validated |
-| [ngpc_assert](#ngpc_assert----runtime-assert-helper) | Runtime assert (stripped in release) | Hardware validated |
+| [ngpc_math](#ngpc_math----math) | Sin/cos LUT, RNG, mul32 | Valide hardware |
+| [ngpc_lut](#ngpc_lut----lookup-tables-fast-math) | atan2, sqrt, distance, division rapide | Valide hardware |
+| [ngpc_lz](#ngpc_lz----tile-decompression) | Décompression RLE / LZ77 vers tiles | Valide hardware |
+| [ngpc_debug](#ngpc_debug----cpu-profiler) | Profiler CPU (barre verte/jaune/rouge) | Non prouve |
+| [ngpc_log](#ngpc_log----ring-buffer-debug-log) | Ring buffer de logs (sur hardware sans serial) | Valide hardware |
+| [ngpc_assert](#ngpc_assert----runtime-assert-helper) | Assert runtime (strippé en release) | Valide hardware |
 
-**Python Tools**
-| Tool | Role |
+**Outils Python**
+| Outil | Rôle |
 |---|---|
-| `ngpc_tilemap.py` | PNG → tiles + tilemap + C palettes |
-| `ngpc_sprite_export.py` | Spritesheet → NgpcMetasprite + C animations |
-| `ngpc_compress.py` | Offline RLE/LZ77 compressor → `.c` |
-| `ngpc_project_init.py` | Bootstrap a new project from the template |
+| `ngpc_tilemap.py` | PNG → tiles + tilemap + palettes C |
+| `ngpc_sprite_export.py` | Spritesheet → NgpcMetasprite + animations C |
+| `ngpc_compress.py` | Compresseur RLE/LZ77 offline → `.c` |
+| `ngpc_project_init.py` | Bootstrap nouveau projet depuis le template |
 
 **Patterns**
-- [Adding your own assets](#adding-your-own-assets) · [State machine](#state-machine-pattern) · [Object pool](#object-pool-pattern) · [Hardware constraints](#hardware-constraints-to-keep-in-mind)
+- [Ajouter des assets](#adding-your-own-assets) · [State machine](#state-machine-pattern) · [Object pool](#object-pool-pattern) · [Contraintes hardware](#hardware-constraints-to-keep-in-mind)
 
-**Optional modules** (`optional/` — copy as needed into `src/`) → [full documentation](optional/README.md)
+**Modules optionnels** (`optional/` — copier au cas par cas dans `src/`) → [documentation complète](optional/README.md)
 Some optional modules are production-ready, others are still evolving and should be treated as work in progress until your own validation pass.
-| Module | RAM | Role |
+| Module | RAM | Rôle |
 |---|---|---|
-| [`ngpc_fixed`](optional/README.md#ngpc_fixed--math-fixe-point-84) | 0 | Fixed-point 8.4 math, `FxVec2`, `FX_LERP`, subpixel physics |
-| [`ngpc_aabb`](optional/README.md#ngpc_aabb--collision-rectangles) | 0 | AABB collision, side detection, swept test (projectiles) |
-| [`ngpc_camera`](optional/README.md#ngpc_camera--caméra) | ~10 B | World-to-screen camera, smooth follow, level clamp |
-| [`ngpc_tilecol`](optional/README.md#ngpc_tilecol--collision-tilemap) | 0 | `tilecol_move()`, one-way, damage, ladder, floor distance |
+| [`ngpc_fixed`](optional/README.md#ngpc_fixed--math-fixe-point-84) | 0 | Math fixe-point 8.4, `FxVec2`, `FX_LERP`, physique subpixel |
+| [`ngpc_aabb`](optional/README.md#ngpc_aabb--collision-rectangles) | 0 | Collision AABB, détection de côté, swept test (projectiles) |
+| [`ngpc_camera`](optional/README.md#ngpc_camera--caméra) | ~10 o | Caméra monde→écran, suivi lisse, clamp niveau |
+| [`ngpc_tilecol`](optional/README.md#ngpc_tilecol--collision-tilemap) | 0 | `tilecol_move()`, one-way, damage, ladder, distance sol |
 
-**Sound**
-- [Sound driver](#sound-driver-srcaudio) — Init · BGM · SFX · Opcodes · Debug · Hardware validated
+**Son**
+- [Sound driver](#sound-driver-srcaudio) — Init · BGM · SFX · Opcodes · Debug · Valide hardware
 
 ---
 
 ## Project docs
 
-**Technical references** (`docs/`) — all hardware knowledge condensed, usable without RAG:
-- [`docs/NGPC_CC900_GUIDE.md`](docs/NGPC_CC900_GUIDE.md): cc900 compiler, C89 rules, far pointers, inline asm
+**Références techniques** (`docs/`) — toute la connaissance hardware condensée, utilisable sans RAG :
+- [`docs/NGPC_CC900_GUIDE.md`](docs/NGPC_CC900_GUIDE.md): compilateur cc900, règles C89, far pointers, inline asm
 - [`docs/NGPC_BIOS_REF.md`](docs/NGPC_BIOS_REF.md): appels BIOS, conventions bank 3, tous les vecteurs
 - [`docs/NGPC_HW_REGISTERS.md`](docs/NGPC_HW_REGISTERS.md): registres K2GE, palette, sprites, tilemap, interruptions
 
@@ -126,16 +126,16 @@ The template ships with a working **intro + black screen + hybrid BGM** demo tha
 ### Hardware coverage from downstream projects (2026-03-18)
 
 Status labels used here:
-- `Hardware validated`: module shipped in `platformmer_test_2` and/or `Shmup_StarGunner`, with a result judged good on real hardware
-- `Unproven`: module present in the template but not covered by this field validation pass
-- `Abandoned`: module kept for reference only, outside the validation path
+- `Valide hardware`: module embarque dans `platformmer_test_2` et/ou `Shmup_StarGunner`, avec un resultat juge bon sur hardware reel
+- `Non prouve`: module present dans le template mais pas couvert par cette validation terrain
+- `Abandonne`: module conserve pour memoire/reference, hors chemin de validation
 
 Counting rules used in this README:
 - public base template: `22` modules listed below in the main module reference
 - distributed template including `optional/`: `57` modules total (`22` base + `35` optional)
-- current downstream coverage: `20/22` hardware-validated modules in the public base, `21/57` across the full distributed template
+- current downstream coverage: `20/22` modules hardware-valides dans le socle public, `21/57` sur le template distribue complet
 
-Hardware-validated in both downstream projects:
+Hardware-valides dans les deux projets downstream:
 - `ngpc_dma`
 - `ngpc_dma_raster`
 - `ngpc_sys`
@@ -158,13 +158,13 @@ Hardware-validated in both downstream projects:
 - `ngpc_lut`
 - hybrid sound driver (`src/audio/sounds.c` + `sound/sound_data.c`)
 
-Hardware-validated in at least one downstream project:
+Hardware-valide dans au moins un projet downstream:
 - `optional/ngpc_mapstream` (`platformmer_test_2`)
 
-Unproven in downstream projects:
+Non prouve dans les projets downstream:
 - `ngpc_debug`
 
-Abandoned / outside validation:
+Abandonne / hors validation:
 - `ngpc_sprmux`
 
 ---
@@ -236,7 +236,7 @@ You need the Toshiba TLCS-900/H toolchain and a working `make` command:
 | `tuconv` | Format converter (ABS to S-record) |
 | `s242ngp` | S-record to NGP cartridge ROM |
 | `make` | Build driver used by the template |
-| `system.lib` | Optional flash-save compatibility library |
+| `system.lib` | Optional — flash save works without it (standalone stubs) |
 | `Python 3.11` (`py`) | Build helpers used by make targets |
 
 Recommended Windows setup:
@@ -248,7 +248,7 @@ Recommended Windows setup:
 Template expectation:
 - `build.bat` sets `THOME` from `compilerPath` for the Toshiba tools
 - `make` itself still has to be installed and available on your machine
-- `system.lib` is optional and only needed if you explicitly want the external flash-save compatibility path
+- `system.lib` is optional — flash save is fully self-contained (standalone AMD stubs)
 
 Optional:
 - `NGPRomResize.exe` or `.py` in a `utils/` folder (pads ROM to 2 MB for flash carts)
@@ -262,7 +262,7 @@ Optional:
 
 1. Edit `build.bat`: set `compilerPath` to your Toshiba toolchain folder
 2. Optional: set `emuPath` if you want auto-launch after build
-3. Optional: place `system.lib` at the project root, or set `systemLibPath`, only if you explicitly want external flash-save compatibility
+3. Optional: place `system.lib` at the project root only if you want the legacy system.lib flash path
 4. Run `build.bat`
 5. Output: `bin/main.ngc`
 
@@ -275,9 +275,9 @@ Minimal Windows checklist:
 - optional: emulator path
 
 Default distributed-template behavior:
-- build works without `system.lib`
-- flash save stays disabled by default
-- if a local `system.lib` is present, `build.bat` auto-enables the matching flash-save path
+- build works without `system.lib` (flash save is fully standalone)
+- flash save stays disabled by default (`NGP_ENABLE_FLASH_SAVE=0`)
+- enable with `make NGP_ENABLE_FLASH_SAVE=1` — no `system.lib` needed
 
 ### Manual (any platform)
 
@@ -292,21 +292,25 @@ Manual build checklist:
 - `make` reachable in `PATH`
 - Python available for `tools/build_utils.py`
 
-If you want to force an external compatibility library, pass `SYSTEM_LIB` explicitly:
+Enable flash save (no system.lib required):
 
 ```bash
-make clean
+make clean && make NGP_ENABLE_FLASH_SAVE=1 && make move_files
+```
+
+Legacy path (if you have system.lib):
+
+```bash
 make NGP_ENABLE_FLASH_SAVE=1 SYSTEM_LIB=/absolute/path/to/system.lib
-make move_files
 ```
 
 Build notes (2026-02-14):
 - `make clean` and `make move_files` use `tools/build_utils.py` (cross-platform, no `rm/mv` dependency).
 - Compilation is launched from project root (keeps `thc1/thc2` resolution stable) with include roots `-Isrc -Isrc/core -Isrc/gfx -Isrc/fx -Isrc/audio`.
-- Template links without external `system.lib` (internal runtime replacement).
-- Flash save is disabled by default in the distributed template.
-- `build.bat` auto-enables flash save only when a local `system.lib` is present.
-- `SYSTEM_LIB` remains available for explicit flash-save compatibility when needed.
+- Template links without `system.lib` — flash save uses standalone AMD stubs (`ngpc_flash_asm.asm`).
+- Flash save is disabled by default (`NGP_ENABLE_FLASH_SAVE=0`).
+- Enable with `NGP_ENABLE_FLASH_SAVE=1`; no `system.lib` required.
+- `SYSTEM_LIB=\<path\>` remains available as a legacy compatibility option.
 - `s242ngp` still emits a temporary `.ngp`, but the template only keeps `.ngc` as the final archived ROM format.
 - `build.bat` now skips ROM resize/emulator launch gracefully if required executables are missing.
 - Current demo baseline keeps game text on `SCR1`; `SCR2` is cleared in title/game init.
@@ -432,14 +436,14 @@ Combined with the software 90-degree rotation, all **8 orientations** are possib
 
 | Orientation | How |
 |---|---|
-| 0° (original) | Direct tile |
-| 90° CW | `ngpc_tile_rotate90` |
-| 180° | Hardware H-flip + V-flip (free, use `put_tile_ex`) |
-| 270° CW | `ngpc_tile_rotate270` |
+| 0Â° (original) | Direct tile |
+| 90Â° CW | `ngpc_tile_rotate90` |
+| 180Â° | Hardware H-flip + V-flip (free, use `put_tile_ex`) |
+| 270Â° CW | `ngpc_tile_rotate270` |
 | Mirror H | Hardware H-flip |
 | Mirror V | Hardware V-flip |
-| Mirror H + 90° | Rotate 90 then H-flip |
-| Mirror V + 90° | Rotate 90 then V-flip |
+| Mirror H + 90Â° | Rotate 90 then H-flip |
+| Mirror V + 90Â° | Rotate 90 then V-flip |
 
 Software rotation rearranges pixel data and costs ~64 iterations per tile.
 Best used at **load time** (pre-rotate once), not per-frame on a 6 MHz CPU.
@@ -534,9 +538,9 @@ Angles: 0 = 0 deg, 64 = 90 deg, 128 = 180 deg, 192 = 270 deg, 256 wraps to 0.
 Use it for non-critical randomness (particles, screen shake, tile variation).
 For proper RNG (game logic, procedural generation), use `ngpc_random()`.
 
-`ngpc_random` limitation: extracts bits 16-30 of the LCG → result is always in **0..32767** regardless
-of `max`. For `max > 32767`, the value will never exceed 32767. If you need
-large random numbers, combine two calls: `ngpc_random(255) | (ngpc_random(127) << 8)`.
+Limite de `ngpc_random` : extrait les bits 16-30 du LCG → résultat dans **0..32767** quel que
+soit `max`. Pour `max > 32767`, la valeur ne dépassera jamais 32767. Si tu as besoin de
+grands nombres aléatoires, combiner deux appels : `ngpc_random(255) | (ngpc_random(127) << 8)`.
 
 ### ngpc_flash -- Save
 
@@ -549,19 +553,19 @@ u8   ngpc_flash_exists(void);           // Check if valid save exists
 
 Flash has limited write cycles. Avoid saving every frame.
 
-**IMPORTANT — magic number**: `ngpc_flash_exists()` checks the first 4 bytes
-of the save area. The save struct MUST start with `{ 0xCA, 0xFE, 0x20, 0x26 }`.
+**IMPORTANT — magic number** : `ngpc_flash_exists()` vérifie les 4 premiers octets
+de la zone de sauvegarde. Le struct de save DOIT commencer par `{ 0xCA, 0xFE, 0x20, 0x26 }`.
 
 ```c
-// Save struct with magic as first field
+// Struct de save avec le magic en premier champ
 typedef struct {
-    u8 magic[4];   /* always { 0xCA, 0xFE, 0x20, 0x26 } */
+    u8 magic[4];   /* toujours { 0xCA, 0xFE, 0x20, 0x26 } */
     u8 hp;
     u8 level;
-    /* ... up to 252 more bytes */
+    /* ... jusqu'a 252 autres octets */
 } SaveData;
 
-// Save (on button press, not every frame!)
+// Sauvegarder (sur pression d'un bouton, pas chaque frame !)
 void save_game(void) {
     SaveData s;
     s.magic[0] = 0xCA; s.magic[1] = 0xFE;
@@ -571,7 +575,7 @@ void save_game(void) {
     ngpc_flash_save(&s);
 }
 
-// Load at startup
+// Charger au demarrage
 void load_game(void) {
     if (ngpc_flash_exists()) {
         SaveData s;
@@ -583,7 +587,7 @@ void load_game(void) {
 ```
 
 Implementation status (2026-02-14):
-- `ngpc_flash_save()` is fully wired to BIOS flash calls (erase + write).
+- `ngpc_flash_save()` uses standalone AMD stubs executed from RAM — no `system.lib` required.
 - Uses `VECT_FLASHERS` (erase block) then `VECT_FLASHWRITE` (write 256 bytes).
 - Default save slot for 2MB ROM layout uses flash offset `0x1FA000`
   (CPU-visible address `0x200000 + 0x1FA000 = 0x3FA000`).
@@ -659,7 +663,7 @@ The bar turns **green** (< 80%), **yellow** (80-100%), or **red** (> 100% = over
 
 Disable for release: `#define NGPC_DEBUG 0` (all calls become no-ops).
 
-Real-hardware note (2026-03-18): this profiler is not covered by the downstream hardware-validation pass and stays `Unproven` in the distributed template.
+Real-hardware note (2026-03-18): this profiler is not covered by the downstream hardware-validation pass and stays `Non prouve` in the distributed template.
 
 ```c
 // Typical game loop
@@ -794,9 +798,9 @@ u8   ngpc_palfx_active(slot);     // Check if running
 Up to **4 simultaneous effects**. Fade interpolates each R/G/B channel independently.
 Cycle rotates colors 1-2-3 (color 0 = transparent, untouched).
 
-Edge cases:
-- `speed=0` in fade/cycle → clamped to 1 (minimum). `speed=1` = 1 step per frame (fastest).
-- `ngpc_palfx_flash(..., duration=0)` → returns `0xFF` (no effect created, no-op).
+Cas limites :
+- `speed=0` dans fade/cycle → clamped à 1 (minimum). `speed=1` = 1 step par frame (le plus rapide).
+- `ngpc_palfx_flash(..., duration=0)` → retourne `0xFF` (aucun effet créé, no-op).
 
 ```c
 // Fade to black on screen transition
@@ -806,7 +810,7 @@ while (ngpc_palfx_active(0)) {
     ngpc_palfx_update();
 }
 
-// Damage flash: 6 frames in white
+// Flash de dommage : 6 frames en blanc
 ngpc_palfx_flash(GFX_SPR, player_pal, RGB(15,15,15), 6);
 
 // Water animation
@@ -915,17 +919,17 @@ Practical example:
 
 ### ngpc_dma_raster -- Raster via MicroDMA (hardware-validated downstream)
 
-`ngpc_dma_raster` is a high-level wrapper over `ngpc_dma` for **per-scanline scrolling**
-with **zero CPU code in HBlank** (MicroDMA handles all register writes).
+`ngpc_dma_raster` est un wrapper haut niveau sur `ngpc_dma` pour faire du **scroll par scanline**
+avec **zéro code CPU en HBlank** (MicroDMA fait les writes de registres).
 
-Key points:
-- Tables in RAM, size `152` bytes (one value per scanline).
-- Re-arm **once per frame** during VBlank, **as early as possible** (right after `ngpc_vsync()`).
-- Exclusive with `ngpc_raster` / `ngpc_sprmux` (shared Timer0).
-- Field status: explicitly validated on real hardware on 2026-02-20 via `platformmer_test_2` and `Shmup_StarGunner`.
-- Two modes:
-  - 2 `u8` tables (X + Y): uses **Timer0 + Timer1** to avoid CHAIN.
-  - 1 packed `u16` table (XY): **single channel + Timer0** (Ganbare-style).
+Points clefs:
+- Tables en RAM, taille `152` bytes (une valeur par ligne).
+- Re-arm **une fois par frame** pendant VBlank, **le plus tôt possible** (juste après `ngpc_vsync()`).
+- Exclusif avec `ngpc_raster` / `ngpc_sprmux` (Timer0 partagé).
+- Statut terrain: explicitement validé sur hardware réel le 2026-02-20 via les projets `platformmer_test_2` et `Shmup_StarGunner`.
+- Deux modes:
+  - 2 tables `u8` (X + Y): utilise **Timer0 + Timer1** pour éviter le CHAIN.
+  - 1 table `u16` packee (XY): **1 seul channel + Timer0** (proche Ganbare).
 
 ```c
 static u8 scr1_x[152];

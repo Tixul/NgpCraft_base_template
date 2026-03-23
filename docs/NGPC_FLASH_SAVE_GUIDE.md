@@ -10,8 +10,9 @@
 // ── build flags ────────────────────────────────────────────────────
 // -DNGP_ENABLE_FLASH_SAVE=1   (disabled by default in the distributed template)
 
-// ── link system.lib ────────────────────────────────────────────────
-// place system.lib at the project root, or pass SYSTEM_LIB=/absolute/path/to/system.lib
+// ── no system.lib required ─────────────────────────────────────────
+// Flash save is self-contained: ngpc_flash_asm.asm embeds standalone AMD stubs.
+// Enable with: make NGP_ENABLE_FLASH_SAVE=1
 
 // ── define your save struct ────────────────────────────────────────
 typedef struct {
@@ -79,7 +80,10 @@ During any flash operation, the BIOS executes **DI** (disable interrupts). This 
 `SysCall.txt p.299`:
 > *System call "VECT_FLASHERS" cannot operate on blocks 32, 33, 34 (F16_B32, F16_B33, F16_B34). When these areas need to be operated on, please use the system library routine "CLR_FLASH_RAM".*
 
-**Workaround:** use `CLR_FLASH_RAM` from `system.lib`.
+**Workaround (original):** use `CLR_FLASH_RAM` from `system.lib` (bank-3 registers).
+
+**Workaround (standalone — used by this template):** `ngpc_flash_asm.asm` embeds
+the AMD sector-erase sequence executed from RAM at `0x6E00` — no `system.lib` required.
 
 ### Bug 2 — CLR_FLASH_RAM silently fails on its 2nd call in the same session
 
@@ -112,7 +116,16 @@ bit  7,(xde)         ; reads 0xCA (real flash data, chip in Read Array mode)
                      ; Chip was never put in erase mode.
 ```
 
-**Consequence:** manual Sharp erase sequences do not work and must not be used.
+**Consequence:** `ldb (xde),imm8` from ROM-resident code still fails (executing from
+the chip being programmed is impossible). The fix is a three-step workaround:
+
+```
+(0x6E) = 0x14    ; assert /WE on cart bus — user code CAN write this register
+(0x6F) = 0xB1    ; watchdog extended mode
+copy stub → 0x6E00 + call 0x6E00   ; execute AMD sequence from RAM, not from flash
+```
+
+This is exactly what `ngpc_flash_asm.asm` does.
 
 ### Bug 4 — asm900 Error-230 with `ld xde3,(xsp+N)`
 
@@ -170,7 +183,7 @@ find_next_slot():
 ngpc_flash_save(data):
     slot = find_next_slot()
     if slot == 32:               // block full
-        ngpc_flash_erase_asm()   // CLR_FLASH_RAM — 1st call of session, always OK
+        ngpc_flash_erase_asm()   // standalone AMD erase — 1st call of session, always OK
         slot = 0
     offset = 0x1FA000 + slot * 256
     ngpc_flash_write_asm(data, offset)
@@ -195,12 +208,19 @@ ngpc_flash_load(data):
 
 - At power-on, the block either has empty slots (≥ 1 byte == 0xFF at the right position) or all 32 slots are full.
 - **Case A — slots available:** saves go to slot 0, 1, 2, … until all 32 are used. Erase is triggered only when slot 32 is needed. In a typical session a game saves at most a handful of times → the block will never fill.
-- **Case B — block full at boot:** first save triggers erase (1st `CLR_FLASH_RAM` call → success), then writes to slot 0. Subsequent saves write to slot 1, 2, …, no more erases.
-- In neither case is `CLR_FLASH_RAM` called twice in the same session.
+- **Case B — block full at boot:** first save triggers erase (1st erase call → success), then writes to slot 0. Subsequent saves write to slot 1, 2, …, no more erases.
+- In neither case is the erase function called twice in the same session.
 
 ---
 
-## 5. system.lib symbols
+## 5. system.lib symbols (reference — no longer a dependency)
+
+> **The template does NOT require `system.lib`.** `ngpc_flash_asm.asm` embeds
+> standalone AMD stubs (erase + write) extracted by disassembly of the
+> hardware-validated StarGunner ROM. `system.lib` remains supported via
+> `SYSTEM_LIB=<path>` if you prefer the original BIOS path.
+
+For reference, the relevant symbols and their register interface:
 
 **TULINK is case-sensitive. All symbols must be UPPER-CASE.**
 
@@ -235,16 +255,17 @@ User-facing API functions (`ngpc_flash_save`, `ngpc_flash_load`) take plain `voi
 
 `SAVE_SIZE` is defined in `ngpc_flash.h`. It must be a **multiple of 256** (BIOS write granularity).
 
-| SAVE_SIZE | Payload bytes | NUM_SLOTS | `rbc3` in ASM |
+| SAVE_SIZE | Payload bytes | NUM_SLOTS | `BC` in ASM |
 |---|---|---|---|
 | 256 (default) | 252 | 32 | `1` |
 | 512 | 508 | 16 | `2` |
 | 1024 | 1020 | 8 | `4` |
 
-If you change `SAVE_SIZE`, you **must also update `rbc3`** in `ngpc_flash_asm.asm`:
+If you change `SAVE_SIZE`, you **must also update `ld bc,N`** in `ngpc_flash_asm.asm`
+(in `_ngpc_flash_write_asm`, line `ld bc,0x0001`):
 
 ```asm
-ld   rbc3,N     ; N = SAVE_SIZE / 256
+ld   bc,N       ; N = SAVE_SIZE / 256
 ```
 
 ---
@@ -255,8 +276,8 @@ ld   rbc3,N     ; N = SAVE_SIZE / 256
 |---|---|
 | `src/core/ngpc_flash.h` | Public API and full documentation |
 | `src/core/ngpc_flash.c` | C implementation: slot scan, erase/write dispatch |
-| `src/core/ngpc_flash_asm.asm` | Pure TLCS-900/H: `CLR_FLASH_RAM` + `WRITE_FLASH_RAM` stubs |
-| `system.lib` | Toshiba system library (place at project root, must be in `LINK_LIBS`) |
+| `src/core/ngpc_flash_asm.asm` | Standalone AMD erase/write stubs (no `system.lib` required) |
+| `system.lib` | Toshiba library — **optional**, only for `SYSTEM_LIB=<path>` compatibility path |
 | `SysCall.txt` (Toshiba SDK) | VECT_FLASHERS bug (p.299), VECT_FLASHWRITE params |
 | `SysLib.txt` (Toshiba SDK) | CLR_FLASH_RAM, WRITE_FLASH_RAM, FLASH_M_READ specs |
 | `FlashMem.txt` (Toshiba SDK) | Block layout for 4/8/16 Mbit carts |
@@ -313,3 +334,4 @@ Summary of key findings:
 | 15 | Manual Sharp erase, bank-3 regs | FERA:00CA | `ldb (xde3),imm8` invalid encoding (Error-230 path) |
 | 16 | Manual Sharp erase, primary XDE | FERA:00CA | Writes silently ignored — user code can't drive /WE |
 | **17** | **Append-only slots** | **✓ SOLVED** | Avoids 2nd CLR_FLASH_RAM call entirely |
+| **18** | **Standalone AMD stubs (no system.lib)** | **✓ SOLVED** | Register 0x6E=0x14 enables /WE; stubs copied to RAM 0x6E00 and called from there |

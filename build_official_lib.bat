@@ -2,11 +2,14 @@
 cls
 
 REM ============================================================
-REM  NgpCraft_base_template - Build script (Windows)
+REM  NgpCraft_base_template - Build script (system.lib path)
 REM  MIT License
 REM
-REM  Flash save uses standalone AMD stubs (no system.lib needed).
-REM  See build_official_lib.bat if you want the system.lib path.
+REM  Uses the official Toshiba system.lib for flash save.
+REM  (CLR_FLASH_RAM + WRITE_FLASH_RAM via bank-3 registers)
+REM
+REM  Use build.bat instead if you do NOT have system.lib --
+REM  the standalone AMD stubs work without it.
 REM
 REM  CONFIGURATION: Edit the paths below to match your setup.
 REM ============================================================
@@ -14,9 +17,11 @@ REM ============================================================
 REM --- Toolchain path (Toshiba cc900 compiler) ---
 SET compilerPath=C:\t900
 
-REM --- Flash save (standalone -- no system.lib required) ---
-REM     0 = disabled (default)   1 = enabled
-SET FlashSave=0
+REM --- Path to system.lib ---
+REM     Option 1: place system.lib in the project root (auto-detected below).
+REM     Option 2: set an explicit path here.
+SET systemLibPath=
+IF EXIST "%~dp0system.lib" SET systemLibPath=%~dp0system.lib
 
 REM --- ROM name (also update CartTitle in src/core/carthdr.h) ---
 SET romName=main
@@ -40,16 +45,19 @@ SET romExt=ngc
 SET rootPath=%~dp0
 path=%path%;%THOME%\bin
 
-echo [NgpCraft_base_template] Building...
+echo [NgpCraft_base_template] Building with system.lib path...
 
-if "%FlashSave%"=="1" (
-    make -f makefile clean NGP_ENABLE_FLASH_SAVE=1
-    make -f makefile NGP_ENABLE_FLASH_SAVE=1
-    make -f makefile move_files NGP_ENABLE_FLASH_SAVE=1
+if not "%systemLibPath%"=="" (
+    echo [NgpCraft_base_template] system.lib: %systemLibPath%
+    make -f makefile clean NGP_ENABLE_FLASH_SAVE=1 SYSTEM_LIB="%systemLibPath%"
+    make -f makefile NGP_ENABLE_FLASH_SAVE=1 SYSTEM_LIB="%systemLibPath%"
+    make -f makefile move_files NGP_ENABLE_FLASH_SAVE=1 SYSTEM_LIB="%systemLibPath%"
 ) else (
-    make -f makefile clean
-    make -f makefile
-    make -f makefile move_files
+    echo [NgpCraft_base_template] ERROR: system.lib not found.
+    echo     Place system.lib in the project root or set systemLibPath above.
+    echo     To build without system.lib, use build.bat instead.
+    pause
+    exit /b 1
 )
 
 if "%ResizeRom%"=="1" (
