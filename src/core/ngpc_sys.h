@@ -12,6 +12,11 @@
 /* Frame counter, incremented by VBI at 60 Hz. */
 extern volatile u8 g_vb_counter;
 
+/* Apply power-off bug patch for prototype firmware (OS_Version == 0x00).
+ * Safe no-op on all retail hardware. Call once at startup before ngpc_init().
+ * Equivalent to SYS_PATCH from system.lib (SNK, 1998). */
+void ngpc_sys_patch(void);
+
 /* Initialize NGPC hardware:
  * - Detects mono/color mode
  * - Installs interrupt vectors (VBL mandatory)

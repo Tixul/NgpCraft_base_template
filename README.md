@@ -10,7 +10,6 @@ This template is one part of the broader **NgpCraft** project. Already available
 - [NGPC_sound_driver_custom](https://github.com/Tixul/NGPC_sound_driver_custom), the custom sound driver used by the audio pipeline and already included in this template
 
 Other NgpCraft tools are planned and will follow.
-Example of games developed with https://github.com/Tixul/Stargunner/tree/main
 
 **License:** MIT (use it for anything, commercial or not)
 
@@ -24,7 +23,7 @@ Example of games developed with https://github.com/Tixul/Stargunner/tree/main
 **Modules — Système**
 | Module | Rôle | Statut |
 |---|---|---|
-| [ngpc_sys](#ngpc_sys----system) | Init hardware, VBlank, memcpy/memset | Valide hardware |
+| [ngpc_sys](#ngpc_sys----system) | Init hardware, SYS_PATCH, VBlank, memcpy/memset | Valide hardware |
 | [ngpc_vramq](#ngpc_vramq----queued-vram-updates) | File d'attente VRAM (flush auto au VBlank) | Valide hardware |
 | [ngpc_timing](#ngpc_timing----timing) | vsync, sleep, vitesse CPU | Valide hardware |
 | [ngpc_input](#ngpc_input----joypad) | Joypad : held / pressed / released / repeat | Valide hardware |
@@ -117,6 +116,7 @@ The template ships with a working **intro + black screen + hybrid BGM** demo tha
 
 - Build pipeline is stable (`make clean`, `make`, `make move_files`).
 - Runtime is self-contained (no mandatory external `system.lib`).
+- `SYS_PATCH` (`ngpc_sys_patch`) is built-in — reverse-engineered from `system.lib`, called automatically by `ngpc_init()`.
 - ROM output is standardized on `main.ngc`.
 - Demo text path was stabilized (sysfont mapping, tilemap packing fix, deterministic screen init).
 - VRAM queue module added (`ngpc_vramq`), auto-flushed from VBlank ISR.
@@ -339,8 +339,10 @@ make NGP_PROFILE_RELEASE=1
 ### ngpc_sys -- System
 
 ```c
+void ngpc_sys_patch(void);      // Power-off bug patch (prototype firmware only, no-op on retail)
 void ngpc_init(void);           // Call first. Sets up interrupts, viewport.
 u8   ngpc_is_color(void);       // 1 = NGPC Color, 0 = mono NGP
+u8   ngpc_get_language(void);   // LANG_ENGLISH (0) or LANG_JAPANESE (1)
 void ngpc_shutdown(void);       // Power off (BIOS call)
 void ngpc_load_sysfont(void);   // Load built-in font into tile RAM
 void ngpc_memcpy(dst, src, n);  // Byte copy
@@ -348,6 +350,11 @@ void ngpc_memset(dst, val, n);  // Byte fill
 
 extern volatile u8 g_vb_counter; // Frame counter (incremented at 60 Hz)
 ```
+
+`ngpc_sys_patch()` is a reverse-engineered equivalent of `SYS_PATCH` from `system.lib` (SNK/Toshiba, 1998).
+It fixes a power-off bug present only in pre-production firmware (`OS_Version == 0x00`): rapid battery removal/reinsertion could prevent the power button from shutting down the console.
+On all retail hardware (`OS_Version >= 0x01`) it is a safe no-op (17 bytes, zero overhead).
+It is called automatically at the top of `ngpc_init()` — **you do not need to call it manually**.
 
 The VBlank interrupt handler is installed automatically by `ngpc_init()`.
 It clears the watchdog, checks for shutdown requests, and increments `g_vb_counter`.

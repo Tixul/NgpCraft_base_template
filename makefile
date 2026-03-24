@@ -66,7 +66,8 @@ OBJS = \
     $(OBJ_DIR)/src/fx/ngpc_lz.rel \
     $(OBJ_DIR)/src/fx/ngpc_lut.rel \
     $(OBJ_DIR)/src/core/ngpc_runtime.rel \
-    $(OBJ_DIR)/src/core/ngpc_runtime_alias.rel
+    $(OBJ_DIR)/src/core/ngpc_runtime_alias.rel \
+    $(OBJ_DIR)/src/core/ngpc_syspatch.rel
 
 ifneq ($(strip $(NGP_ENABLE_FLASH_SAVE)),0)
 OBJS += $(OBJ_DIR)/src/core/ngpc_flash_asm.rel

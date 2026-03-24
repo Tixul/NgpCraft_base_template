@@ -73,6 +73,10 @@ static void __interrupt isr_vblank(void)
 
 void ngpc_init(void)
 {
+    /* Power-off bug patch for prototype firmware (no-op on retail hardware).
+     * Must run before anything else, interrupts still disabled at this point. */
+    ngpc_sys_patch();
+
     /* Initialize C globals in RAM (no external system.lib startup). */
     runtime_bootstrap();
 
