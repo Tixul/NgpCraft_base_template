@@ -15,68 +15,68 @@ Other NgpCraft tools are planned and will follow.
 
 ---
 
-## Sommaire
+## Overview
 
 **Setup**
-- [Docs du projet](#project-docs) · [Hardware overview](#hardware-overview) · [Structure du projet](#project-structure) · [Prérequis](#prerequisites) · [Build](#build)
+- [Project docs](#project-docs) · [Hardware overview](#hardware-overview) · [Project structure](#project-structure) · [Prerequisites](#prerequisites) · [Build](#build)
 
-**Modules — Système**
-| Module | Rôle | Statut |
+**Modules — System**
+| Module | Role | Status |
 |---|---|---|
-| [ngpc_sys](#ngpc_sys----system) | Init hardware, SYS_PATCH, VBlank, memcpy/memset | Valide hardware |
-| [ngpc_vramq](#ngpc_vramq----queued-vram-updates) | File d'attente VRAM (flush auto au VBlank) | Valide hardware |
-| [ngpc_timing](#ngpc_timing----timing) | vsync, sleep, vitesse CPU | Valide hardware |
-| [ngpc_input](#ngpc_input----joypad) | Joypad : held / pressed / released / repeat | Valide hardware |
-| [ngpc_flash](#ngpc_flash----save) | Sauvegarde 256 octets en flash cart | Valide hardware |
-| [ngpc_rtc](#ngpc_rtc----real-time-clock) | Horloge temps réel (BCD) | Valide hardware |
+| [ngpc_sys](#ngpc_sys----system) | Hardware init, SYS_PATCH, VBlank, memcpy/memset | Hardware validated |
+| [ngpc_vramq](#ngpc_vramq----queued-vram-updates) | VRAM write queue (auto-flushed at VBlank) | Hardware validated |
+| [ngpc_timing](#ngpc_timing----timing) | vsync, sleep, CPU speed | Hardware validated |
+| [ngpc_input](#ngpc_input----joypad) | Joypad: held / pressed / released / repeat | Hardware validated |
+| [ngpc_flash](#ngpc_flash----save) | 256-byte save to flash cart | Hardware validated |
+| [ngpc_rtc](#ngpc_rtc----real-time-clock) | Real-time clock (BCD) | Hardware validated |
 
-**Modules — Graphismes**
-| Module | Rôle | Statut |
+**Modules — Graphics**
+| Module | Role | Status |
 |---|---|---|
-| [ngpc_gfx](#ngpc_gfx----graphics) | Tiles, tilemap, palettes, scroll, effets écran | Valide hardware |
-| [ngpc_sprite](#ngpc_sprite----sprites) | Sprites hardware (64 max, 8x8, flip, chain) | Valide hardware |
-| [ngpc_text](#ngpc_text----text) | Affichage texte/chiffres avec la sysfont | Valide hardware |
-| [ngpc_bitmap](#ngpc_bitmap----bitmap-mode) | Mode bitmap émulé (380 tiles, pixels directs) | Valide hardware |
-| [ngpc_metasprite](#ngpc_metasprite----multi-tile-sprites) | Multi-sprites (jusqu'à 16 parts), animation | Valide hardware |
-| [ngpc_sprmux](#ngpc_sprmux----sprite-multiplexing) | Multiplexage sprites (>64 logiques) via HBlank | Abandonne |
-| [ngpc_palfx](#ngpc_palfx----palette-effects) | Fade, flash, cycle couleur (4 effets simultanés) | Valide hardware |
-| [ngpc_raster](#ngpc_raster----hblank-raster-effects) | Effets raster HBlank (scroll par ligne, parallax) | Valide hardware |
-| [ngpc_dma](#ngpc_dma----microdma-hardware-validated) | MicroDMA (hardware OK) — tables scanline vers registres | Valide hardware |
-| [ngpc_dma_raster](#ngpc_dma_raster----raster-via-microdma) | Effets raster via MicroDMA (sans ISR HBlank CPU) | Valide hardware |
+| [ngpc_gfx](#ngpc_gfx----graphics) | Tiles, tilemap, palettes, scroll, screen effects | Hardware validated |
+| [ngpc_sprite](#ngpc_sprite----sprites) | Hardware sprites (64 max, 8x8, flip, chain) | Hardware validated |
+| [ngpc_text](#ngpc_text----text) | Text/number display using the sysfont | Hardware validated |
+| [ngpc_bitmap](#ngpc_bitmap----bitmap-mode) | Emulated bitmap mode (380 tiles, direct pixel access) | Hardware validated |
+| [ngpc_metasprite](#ngpc_metasprite----multi-tile-sprites) | Multi-tile sprites (up to 16 parts), animation | Hardware validated |
+| [ngpc_sprmux](#ngpc_sprmux----sprite-multiplexing) | Sprite multiplexing (>64 logical sprites) via HBlank | Abandoned |
+| [ngpc_palfx](#ngpc_palfx----palette-effects) | Fade, flash, color cycle (4 simultaneous effects) | Hardware validated |
+| [ngpc_raster](#ngpc_raster----hblank-raster-effects) | HBlank raster effects (per-line scroll, parallax) | Hardware validated |
+| [ngpc_dma](#ngpc_dma----microdma-hardware-validated) | MicroDMA (hardware validated) — scanline tables to registers | Hardware validated |
+| [ngpc_dma_raster](#ngpc_dma_raster----raster-via-microdma) | Raster effects via MicroDMA (no CPU HBlank ISR) | Hardware validated |
 
-**Modules — Utilitaires**
-| Module | Rôle | Statut |
+**Modules — Utilities**
+| Module | Role | Status |
 |---|---|---|
-| [ngpc_math](#ngpc_math----math) | Sin/cos LUT, RNG, mul32 | Valide hardware |
-| [ngpc_lut](#ngpc_lut----lookup-tables-fast-math) | atan2, sqrt, distance, division rapide | Valide hardware |
-| [ngpc_lz](#ngpc_lz----tile-decompression) | Décompression RLE / LZ77 vers tiles | Valide hardware |
-| [ngpc_debug](#ngpc_debug----cpu-profiler) | Profiler CPU (barre verte/jaune/rouge) | Non prouve |
-| [ngpc_log](#ngpc_log----ring-buffer-debug-log) | Ring buffer de logs (sur hardware sans serial) | Valide hardware |
-| [ngpc_assert](#ngpc_assert----runtime-assert-helper) | Assert runtime (strippé en release) | Valide hardware |
+| [ngpc_math](#ngpc_math----math) | Sin/cos LUT, RNG, mul32 | Hardware validated |
+| [ngpc_lut](#ngpc_lut----lookup-tables-fast-math) | atan2, sqrt, distance, fast division | Hardware validated |
+| [ngpc_lz](#ngpc_lz----tile-decompression) | RLE / LZ77 tile decompression | Hardware validated |
+| [ngpc_debug](#ngpc_debug----cpu-profiler) | CPU profiler (green/yellow/red bar) | Not validated |
+| [ngpc_log](#ngpc_log----ring-buffer-debug-log) | Debug log ring buffer (no serial hardware) | Hardware validated |
+| [ngpc_assert](#ngpc_assert----runtime-assert-helper) | Runtime assert (stripped in release builds) | Hardware validated |
 
-**Outils Python**
-| Outil | Rôle |
+**Python Tools**
+| Tool | Role |
 |---|---|
 | `ngpc_tilemap.py` | PNG → tiles + tilemap + palettes C |
 | `ngpc_sprite_export.py` | Spritesheet → NgpcMetasprite + animations C |
-| `ngpc_compress.py` | Compresseur RLE/LZ77 offline → `.c` |
-| `ngpc_project_init.py` | Bootstrap nouveau projet depuis le template |
+| `ngpc_compress.py` | Offline RLE/LZ77 compressor → `.c` |
+| `ngpc_project_init.py` | Bootstrap a new project from this template |
 
 **Patterns**
-- [Ajouter des assets](#adding-your-own-assets) · [State machine](#state-machine-pattern) · [Object pool](#object-pool-pattern) · [Contraintes hardware](#hardware-constraints-to-keep-in-mind)
+- [Adding your own assets](#adding-your-own-assets) · [State machine](#state-machine-pattern) · [Object pool](#object-pool-pattern) · [Hardware constraints](#hardware-constraints-to-keep-in-mind)
 
-**Modules optionnels** (`optional/` — copier au cas par cas dans `src/`) → [documentation complète](optional/README.md)
+**Optional modules** (`optional/` — copy as needed into `src/`) → [full documentation](optional/README.md)
 Some optional modules are production-ready, others are still evolving and should be treated as work in progress until your own validation pass.
-| Module | RAM | Rôle |
+| Module | RAM | Role |
 |---|---|---|
-| [`ngpc_mapstream`](optional/README.md#ngpc_mapstream--streaming-tilemap-cartes--3232) ★ | 11 o | Tilemap scrollante > 32×32 tiles — streaming VRAM colonne/ligne depuis ROM. **Valide hardware** |
-| [`ngpc_fixed`](optional/README.md#ngpc_fixed--math-fixe-point-84) | 0 | Math fixe-point 8.4, `FxVec2`, `FX_LERP`, physique subpixel |
-| [`ngpc_aabb`](optional/README.md#ngpc_aabb--collision-rectangles) | 0 | Collision AABB, détection de côté, swept test (projectiles) |
-| [`ngpc_camera`](optional/README.md#ngpc_camera--caméra) | ~10 o | Caméra monde→écran, suivi lisse, clamp niveau |
-| [`ngpc_tilecol`](optional/README.md#ngpc_tilecol--collision-tilemap) | 0 | `tilecol_move()`, one-way, damage, ladder, distance sol |
+| [`ngpc_mapstream`](optional/README.md#ngpc_mapstream--streaming-tilemap-cartes--3232) ★ | 11 B | Scrolling tilemap > 32×32 tiles — VRAM column/row streaming from ROM. **Hardware validated** |
+| [`ngpc_fixed`](optional/README.md#ngpc_fixed--math-fixe-point-84) | 0 | Fixed-point math 8.4, `FxVec2`, `FX_LERP`, sub-pixel physics |
+| [`ngpc_aabb`](optional/README.md#ngpc_aabb--collision-rectangles) | 0 | AABB collision, side detection, swept test (projectiles) |
+| [`ngpc_camera`](optional/README.md#ngpc_camera--caméra) | ~10 B | World→screen camera, smooth follow, level clamp |
+| [`ngpc_tilecol`](optional/README.md#ngpc_tilecol--collision-tilemap) | 0 | `tilecol_move()`, one-way platforms, damage, ladder, floor distance |
 
-**Son**
-- [Sound driver](#sound-driver-srcaudio) — Init · BGM · SFX · Opcodes · Debug · Valide hardware
+**Sound**
+- [Sound driver](#sound-driver-srcaudio) — Init · BGM · SFX · Opcodes · Debug · Hardware validated
 
 ---
 
@@ -130,16 +130,16 @@ For more ambitious projects, the `optional/` library extends the template with p
 ### Hardware coverage from downstream projects (2026-03-18)
 
 Status labels used here:
-- `Valide hardware`: module embarque dans `platformmer_test_2` et/ou `Shmup_StarGunner`, avec un resultat juge bon sur hardware reel
-- `Non prouve`: module present dans le template mais pas couvert par cette validation terrain
-- `Abandonne`: module conserve pour memoire/reference, hors chemin de validation
+- `Hardware validated`: module deployed in `platformmer_test_2` and/or `Shmup_StarGunner`, confirmed working on real hardware
+- `Not validated`: module present in the template but not covered by this field validation pass
+- `Abandoned`: module kept for reference only, outside the validation path
 
 Counting rules used in this README:
 - public base template: `22` modules listed below in the main module reference
 - distributed template including `optional/`: `57` modules total (`22` base + `35` optional)
-- current downstream coverage: `20/22` modules hardware-valides dans le socle public, `21/57` sur le template distribue complet
+- current downstream coverage: `20/22` modules hardware-validated in the public base, `21/57` across the full distributed template
 
-Hardware-valides dans les deux projets downstream:
+Hardware-validated in both downstream projects:
 - `ngpc_dma`
 - `ngpc_dma_raster`
 - `ngpc_sys`
@@ -162,13 +162,13 @@ Hardware-valides dans les deux projets downstream:
 - `ngpc_lut`
 - hybrid sound driver (`src/audio/sounds.c` + `sound/sound_data.c`)
 
-Hardware-valide dans au moins un projet downstream:
+Hardware-validated in at least one downstream project:
 - `optional/ngpc_mapstream` (`platformmer_test_2`)
 
-Non prouve dans les projets downstream:
+Not validated in downstream projects:
 - `ngpc_debug`
 
-Abandonne / hors validation:
+Abandoned / outside validation:
 - `ngpc_sprmux`
 
 ---
@@ -549,9 +549,9 @@ Angles: 0 = 0 deg, 64 = 90 deg, 128 = 180 deg, 192 = 270 deg, 256 wraps to 0.
 Use it for non-critical randomness (particles, screen shake, tile variation).
 For proper RNG (game logic, procedural generation), use `ngpc_random()`.
 
-Limite de `ngpc_random` : extrait les bits 16-30 du LCG → résultat dans **0..32767** quel que
-soit `max`. Pour `max > 32767`, la valeur ne dépassera jamais 32767. Si tu as besoin de
-grands nombres aléatoires, combiner deux appels : `ngpc_random(255) | (ngpc_random(127) << 8)`.
+`ngpc_random` limitation: extracts bits 16-30 from the LCG → result is always in **0..32767** regardless
+of `max`. For `max > 32767`, the return value will never exceed 32767. If you need larger random numbers,
+combine two calls: `ngpc_random(255) | (ngpc_random(127) << 8)`.
 
 ### ngpc_flash -- Save
 
@@ -564,19 +564,19 @@ u8   ngpc_flash_exists(void);           // Check if valid save exists
 
 Flash has limited write cycles. Avoid saving every frame.
 
-**IMPORTANT — magic number** : `ngpc_flash_exists()` vérifie les 4 premiers octets
-de la zone de sauvegarde. Le struct de save DOIT commencer par `{ 0xCA, 0xFE, 0x20, 0x26 }`.
+**IMPORTANT — magic number**: `ngpc_flash_exists()` checks the first 4 bytes of the save area.
+The save struct MUST start with `{ 0xCA, 0xFE, 0x20, 0x26 }`.
 
 ```c
-// Struct de save avec le magic en premier champ
+// Save struct with magic as first field
 typedef struct {
-    u8 magic[4];   /* toujours { 0xCA, 0xFE, 0x20, 0x26 } */
+    u8 magic[4];   /* always { 0xCA, 0xFE, 0x20, 0x26 } */
     u8 hp;
     u8 level;
-    /* ... jusqu'a 252 autres octets */
+    /* ... up to 252 more bytes */
 } SaveData;
 
-// Sauvegarder (sur pression d'un bouton, pas chaque frame !)
+// Save (on button press, not every frame!)
 void save_game(void) {
     SaveData s;
     s.magic[0] = 0xCA; s.magic[1] = 0xFE;
@@ -586,7 +586,7 @@ void save_game(void) {
     ngpc_flash_save(&s);
 }
 
-// Charger au demarrage
+// Load at startup
 void load_game(void) {
     if (ngpc_flash_exists()) {
         SaveData s;
@@ -674,7 +674,7 @@ The bar turns **green** (< 80%), **yellow** (80-100%), or **red** (> 100% = over
 
 Disable for release: `#define NGPC_DEBUG 0` (all calls become no-ops).
 
-Real-hardware note (2026-03-18): this profiler is not covered by the downstream hardware-validation pass and stays `Non prouve` in the distributed template.
+Real-hardware note (2026-03-18): this profiler is not covered by the downstream hardware-validation pass and stays `Not validated` in the distributed template.
 
 ```c
 // Typical game loop
@@ -809,9 +809,9 @@ u8   ngpc_palfx_active(slot);     // Check if running
 Up to **4 simultaneous effects**. Fade interpolates each R/G/B channel independently.
 Cycle rotates colors 1-2-3 (color 0 = transparent, untouched).
 
-Cas limites :
-- `speed=0` dans fade/cycle → clamped à 1 (minimum). `speed=1` = 1 step par frame (le plus rapide).
-- `ngpc_palfx_flash(..., duration=0)` → retourne `0xFF` (aucun effet créé, no-op).
+Edge cases:
+- `speed=0` in fade/cycle → clamped to 1 (minimum). `speed=1` = 1 step per frame (fastest).
+- `ngpc_palfx_flash(..., duration=0)` → returns `0xFF` (no effect created, no-op).
 
 ```c
 // Fade to black on screen transition
@@ -821,7 +821,7 @@ while (ngpc_palfx_active(0)) {
     ngpc_palfx_update();
 }
 
-// Flash de dommage : 6 frames en blanc
+// Damage flash: 6 frames white
 ngpc_palfx_flash(GFX_SPR, player_pal, RGB(15,15,15), 6);
 
 // Water animation
@@ -930,17 +930,17 @@ Practical example:
 
 ### ngpc_dma_raster -- Raster via MicroDMA (hardware-validated downstream)
 
-`ngpc_dma_raster` est un wrapper haut niveau sur `ngpc_dma` pour faire du **scroll par scanline**
-avec **zéro code CPU en HBlank** (MicroDMA fait les writes de registres).
+`ngpc_dma_raster` is a high-level wrapper around `ngpc_dma` for **per-scanline scroll**
+with **zero CPU code in HBlank** (MicroDMA handles all register writes).
 
-Points clefs:
-- Tables en RAM, taille `152` bytes (une valeur par ligne).
-- Re-arm **une fois par frame** pendant VBlank, **le plus tôt possible** (juste après `ngpc_vsync()`).
-- Exclusif avec `ngpc_raster` / `ngpc_sprmux` (Timer0 partagé).
-- Statut terrain: explicitement validé sur hardware réel le 2026-02-20 via les projets `platformmer_test_2` et `Shmup_StarGunner`.
-- Deux modes:
-  - 2 tables `u8` (X + Y): utilise **Timer0 + Timer1** pour éviter le CHAIN.
-  - 1 table `u16` packee (XY): **1 seul channel + Timer0** (proche Ganbare).
+Key points:
+- Tables in RAM, size `152` bytes (one value per scanline).
+- Re-arm **once per frame** during VBlank, **as early as possible** (right after `ngpc_vsync()`).
+- Exclusive with `ngpc_raster` / `ngpc_sprmux` (shared Timer0).
+- Field status: explicitly validated on real hardware on 2026-02-20 via `platformmer_test_2` and `Shmup_StarGunner`.
+- Two modes:
+  - 2 `u8` tables (X + Y): uses **Timer0 + Timer1** to avoid CHAIN.
+  - 1 packed `u16` table (XY): **single channel + Timer0** (close to Ganbare).
 
 ```c
 static u8 scr1_x[152];
