@@ -69,6 +69,7 @@ Other NgpCraft tools are planned and will follow.
 Some optional modules are production-ready, others are still evolving and should be treated as work in progress until your own validation pass.
 | Module | RAM | Rôle |
 |---|---|---|
+| [`ngpc_mapstream`](optional/README.md#ngpc_mapstream--streaming-tilemap-cartes--3232) ★ | 11 o | Tilemap scrollante > 32×32 tiles — streaming VRAM colonne/ligne depuis ROM. **Valide hardware** |
 | [`ngpc_fixed`](optional/README.md#ngpc_fixed--math-fixe-point-84) | 0 | Math fixe-point 8.4, `FxVec2`, `FX_LERP`, physique subpixel |
 | [`ngpc_aabb`](optional/README.md#ngpc_aabb--collision-rectangles) | 0 | Collision AABB, détection de côté, swept test (projectiles) |
 | [`ngpc_camera`](optional/README.md#ngpc_camera--caméra) | ~10 o | Caméra monde→écran, suivi lisse, clamp niveau |
@@ -111,6 +112,8 @@ The template ships with a working **intro + black screen + hybrid BGM** demo tha
 - Hybrid music playback via the PSG driver
 - Joypad input with edge detection (pressed / released / held)
 - Frame counter display
+
+For more ambitious projects, the `optional/` library extends the template with production-ready modules validated in real downstream games. A notable example is [`ngpc_mapstream`](optional/README.md#ngpc_mapstream--streaming-tilemap-cartes--3232), which streams large tilemaps (any size, stored in ROM) into the hardware scroll planes one column/row at a time — lifting the hardware's 32×32-tile VRAM limit and enabling smooth side-scrolling or top-down worlds without any extra RAM overhead beyond the 11-byte state struct.
 
 ### Current baseline status (2026-03-18)
 
