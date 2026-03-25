@@ -1451,6 +1451,148 @@ ngpc_score_table_sort(&hi);
 
 ---
 
+### `ngpc_vehicle` — Physique véhicule top-down (8 directions)
+**Type :** .h + .c · **RAM :** 8 octets (`NgpcVehicle`) + 4 octets opt. (`NgpcDriftState`) · **Dépend de :** `ngpc_fixed`, `ngpc_tilecol`
+
+Modèle physique simplifié style Micro Machines : vitesse scalaire (avant/arrière), direction discrète 8 crans (0=E, 1=NE, …, 7=SE), friction différenciée par surface, rebond sur murs.
+
+#### Physique de base
+
+| Élément | Description |
+|---|---|
+| `NgpcVehicle {pos, speed, dir, flags}` | 8 octets — position fx16, vitesse fx16, direction 0-7, flags d'état |
+| `ngpc_vehicle_init(v, px, py, dir)` | Initialise à la position pixel, vitesse = 0 |
+| `ngpc_vehicle_steer(v, delta)` | Tourne de ±1 cran (modulo 8) |
+| `ngpc_vehicle_accel(v, amount, max_speed)` | Accélère de `amount` fx16, clampé à `[-max_speed, max_speed]` |
+| `ngpc_vehicle_brake(v, amount)` | Décélère vers 0 de `amount` fx16 |
+| `ngpc_vehicle_update(v, col, rw, rh)` | Met à jour la physique : surface, friction, déplacement, collisions |
+| `VEH_FLAG_WALL_HIT` | Rebond sur mur ce frame |
+| `VEH_FLAG_OFFTRACK` | Tile VOID — hors-piste |
+| `VEH_FLAG_BOOSTING` | Sur boost strip ce frame |
+| `VEH_TILE_BOOST / GRAVEL / VOID` | Types de tiles spéciaux (IDs 5-7) |
+| `VEH_SPEED_MAX` | 4 px/frame (fx16) |
+| `VEH_FRICTION_TRACK / GRAVEL` | 15/16 (piste) ou 12/16 (gravier) |
+| `VEH_BOUNCE_FACTOR` | 0.5 — demi-vitesse après rebond |
+
+#### Extension drift (opt-in, 4 octets)
+
+| Élément | Description |
+|---|---|
+| `NgpcDriftState {vel_lat}` | Vitesse latérale courante en fx16 |
+| `ngpc_vehicle_drift_reset(d)` | Remet `vel_lat` à zéro |
+| `ngpc_vehicle_steer_drift(v, d, delta)` | Virage avec transfert vitesse → latéral |
+| `ngpc_vehicle_update_drift_auto(v, d, col, rw, rh, is_turning)` | Update complet avec grip auto (recommandé) |
+| `ngpc_vehicle_update_drift(v, d, col, rw, rh, grip)` | Update avec grip manuel |
+| `VEH_GRIP_HIGH / LOW / ICE` | 13/16 · 8/16 · 4/16 — adhérence par surface |
+| `VEH_FLAG_DRIFTING` | Vitesse latérale > `VEH_DRIFT_THRESH` (2 px/frame) |
+
+> **Budget CPU :** quand `is_turning == 0` et `vel_lat == {0,0}`, `update_drift_auto()` appelle directement `ngpc_vehicle_update()` — coût identique au cas sans drift (3 comparaisons d'overhead).
+
+#### IA waypoints
+
+| Élément | Description |
+|---|---|
+| `NgpcWaypoint {x, y}` | Centre pixel d'un waypoint (exporté par l'éditeur) |
+| `ngpc_vehicle_ai_steer(v, wps, count, wp_idx, precision, accel, max_speed)` | Pilote automatique : oriente + accélère, freine en virage serré, avance `wp_idx` si dans le rayon. Retourne 1 si waypoint avancé |
+| `ngpc_vehicle_lap_progress(laps, gate, gate_count)` | Score de progression = `laps × gate_count + gate` — comparer pour le classement |
+| `VEH_AI_PRECISION` | Rayon de capture waypoint par défaut (16 px, Manhattan) |
+| `VEH_ACCEL_DEFAULT` | 0.25 px/frame |
+| `VEH_BRAKE_FORCE` | 0.5 px/frame |
+
+```c
+/* Physique de base */
+static NgpcVehicle car;
+ngpc_vehicle_init(&car, 80, 60, 0);  /* position (80,60), cap Est */
+
+/* Game loop */
+if (btn & BTN_RIGHT) ngpc_vehicle_steer(&car, +1);
+if (btn & BTN_LEFT)  ngpc_vehicle_steer(&car, -1);
+if (btn & BTN_A)     ngpc_vehicle_accel(&car, VEH_ACCEL_DEFAULT, VEH_SPEED_MAX);
+if (btn & BTN_B)     ngpc_vehicle_brake(&car, VEH_BRAKE_FORCE);
+ngpc_vehicle_update(&car, &col, 8, 8);
+if (car.flags & VEH_FLAG_OFFTRACK) respawn(&car);
+
+/* Drift (ajouter NgpcDriftState à côté du véhicule) */
+static NgpcDriftState drift;
+u8 turning = (btn & (BTN_LEFT | BTN_RIGHT)) != 0;
+if (turning) ngpc_vehicle_steer_drift(&car, &drift, delta);
+ngpc_vehicle_update_drift_auto(&car, &drift, &col, 8, 8, turning);
+if (car.flags & VEH_FLAG_DRIFTING) play_sfx(SFX_SCREECH);
+
+/* IA (tableau de waypoints exporté par l'éditeur) */
+extern const NgpcWaypoint g_race_waypoints[];
+#define RACE_WP_COUNT 8
+static u8 ai_wp = 0;
+ngpc_vehicle_ai_steer(&ai_car, g_race_waypoints, RACE_WP_COUNT,
+                       &ai_wp, VEH_AI_PRECISION, VEH_ACCEL_DEFAULT, VEH_SPEED_MAX);
+
+/* Classement (comparer les scores de progression) */
+u16 score_p = ngpc_vehicle_lap_progress(p_laps, p_gate, RACE_LAP_GATE_COUNT);
+u16 score_a = ngpc_vehicle_lap_progress(a_laps, a_gate, RACE_LAP_GATE_COUNT);
+u8 player_leads = (score_p > score_a);
+```
+
+---
+
+### `ngpc_pushblock` — Blocs poussables tile-based (Sokoban)
+**Type :** .h + .c · **RAM :** 6 octets par bloc (`NgpcPushBlock`) · **Dépend de :** `ngpc_tilecol`
+
+Mécanique Sokoban : le joueur pousse des blocs d'une case à la fois. Gère les collisions bloc-mur, bloc-bloc et la détection de zones cibles.
+
+| Élément | Description |
+|---|---|
+| `NgpcPushBlock {tx, ty, active, _pad}` | 6 octets — position en coordonnées tile |
+| `ngpc_pushblock_init(b, tx, ty)` | Initialise à la position tile |
+| `ngpc_pushblock_try_push(b, others, n, ptx, pty, dx, dy, col, void_type)` | Tente de pousser le bloc. Retourne `PUSH_NONE / PUSH_MOVED / PUSH_VOID` |
+| `ngpc_pushblock_on_region(b, rx, ry, rw, rh)` | 1 si le bloc est dans la région tile (pour déclencheur victoire) |
+| `ngpc_pushblock_tile_type(b, col)` | Type de tile sous le bloc (via `ngpc_tilecol`) |
+| `ngpc_pushblock_pixel(b, tile_size, px, py)` | Coordonnées pixel du coin haut-gauche |
+| `PUSH_NONE / PUSH_MOVED / PUSH_VOID` | Résultat de `try_push` |
+
+```c
+/* Initialisation depuis l'export éditeur */
+extern const NgpcPbTile g_puzzle01_push_block_tiles[];
+#define PUZZLE01_PUSH_BLOCK_COUNT 3
+
+static NgpcPushBlock blocks[PUZZLE01_PUSH_BLOCK_COUNT];
+for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++)
+    ngpc_pushblock_init(&blocks[i], g_puzzle01_push_block_tiles[i].tx,
+                                    g_puzzle01_push_block_tiles[i].ty);
+
+/* Game loop — bouton A = pousser dans la direction du joueur */
+if (btn_pressed & BTN_A) {
+    s8 dx = player_dir_x;  /* -1, 0, +1 */
+    s8 dy = player_dir_y;
+    for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
+        u8 r = ngpc_pushblock_try_push(&blocks[i], blocks, PUZZLE01_PUSH_BLOCK_COUNT,
+                                        player_tx, player_ty, dx, dy, &col, 0);
+        if (r == PUSH_VOID) { blocks[i].active = 0; }   /* bloc tombé dans le vide */
+    }
+}
+
+/* Vérifier victoire : tous les blocs sur leur case cible */
+u8 solved = 1;
+for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
+    /* Région cible exportée par l'éditeur (rx,ry = coin, rw=rh=1) */
+    if (!ngpc_pushblock_on_region(&blocks[i], target_rx[i], target_ry[i], 1, 1))
+        solved = 0;
+}
+if (solved) fsm_set_state(STATE_WIN);
+
+/* Rendu */
+for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
+    if (!blocks[i].active) continue;
+    s16 px, py;
+    ngpc_pushblock_pixel(&blocks[i], 8, &px, &py);
+    ngpc_sprite_draw(SPR_BLOCK, px - cam_x, py - cam_y);
+}
+```
+
+> **Mouvement joueur :** `try_push` est appelé avec les coordonnées tile du joueur et sa direction. Si la case adjacente dans la direction `(dx,dy)` correspond au bloc, il est poussé.
+> **Tip :** utiliser `ngpc_pushblock_tile_type()` pour détecter les pressure plates (type custom) sans modifier la logique core.
+
+---
+
 > Les modules suivants sont **déjà dans le core** et n'ont pas besoin d'un module optionnel :
 > `ngpc_input` · `ngpc_text` · `ngpc_sprite` · `ngpc_math` (rand, sin, cos) · `ngpc_palfx` (fade, flash) · `ngpc_flash` (save 256 B)
 
@@ -1463,6 +1605,7 @@ ngpc_score_table_sort(&hi);
 | **Platformer** | `ngpc_platform` ✓, `ngpc_tilecol` ✓, `ngpc_anim` ✓, `ngpc_timer` ✓, `ngpc_pool` ✓, `ngpc_bullet` ✓, `ngpc_kinematic` ✓, `ngpc_room` ✓, `ngpc_transition` ✓, `ngpc_score` ✓, `ngpc_winani` ✓, `ngpc_mapstream` ✓ (grands niveaux), `ngpc_seq` ✓ (jingles/fanfares) |
 | **Shooter** | `ngpc_bullet` ✓, `ngpc_pool` ✓, `ngpc_particle` ✓, `ngpc_anim` ✓, `ngpc_timer` ✓, `ngpc_aabb` ✓, `ngpc_wave` ✓, `ngpc_score` ✓, `ngpc_hud` ✓, `ngpc_soam` ✓, `ngpc_transition` ✓, `ngpc_raster_chain` ✓, `ngpc_seq` ✓ (SFX séquencés) |
 | **RPG / Aventure** | `ngpc_actor` ✓, `ngpc_menu` ✓, `ngpc_fsm` ✓, `ngpc_camera` ✓, `ngpc_anim` ✓, `ngpc_tween` ✓, `ngpc_dialog` ✓, `ngpc_room` ✓, `ngpc_transition` ✓, `ngpc_inventory` ✓, `ngpc_entity` ✓, `ngpc_path` ✓, `ngpc_winani` ✓, `ngpc_tileblitter` ✓, `ngpc_mapstream` ✓ (monde ouvert), `ngpc_seq` ✓ (jingles de scène) |
-| **Puzzle** | `ngpc_menu` ✓, `ngpc_timer` ✓, `ngpc_tween` ✓, `ngpc_easing` ✓, `ngpc_fsm` ✓, `ngpc_grid` ✓, `ngpc_score` ✓, `ngpc_transition` ✓, `ngpc_seq` ✓ (jingle victoire) |
+| **Puzzle** | `ngpc_menu` ✓, `ngpc_timer` ✓, `ngpc_tween` ✓, `ngpc_easing` ✓, `ngpc_fsm` ✓, `ngpc_grid` ✓, `ngpc_pushblock` ✓ (blocs poussables), `ngpc_score` ✓, `ngpc_transition` ✓, `ngpc_seq` ✓ (jingle victoire) |
+| **Course (top-down)** | `ngpc_vehicle` ✓, `ngpc_tilecol` ✓, `ngpc_fixed` ✓, `ngpc_camera` ✓, `ngpc_anim` ✓, `ngpc_timer` ✓, `ngpc_hud` ✓, `ngpc_score` ✓, `ngpc_soam` ✓, `ngpc_transition` ✓, `ngpc_seq` ✓ (musique/SFX) |
 | **Action top-down** | `ngpc_actor` ✓, `ngpc_bullet` ✓, `ngpc_fsm` ✓, `ngpc_aabb` ✓, `ngpc_anim` ✓, `ngpc_particle` ✓, `ngpc_entity` ✓, `ngpc_path` ✓, `ngpc_wave` ✓, `ngpc_score` ✓, `ngpc_inventory` ✓, `ngpc_hud` ✓, `ngpc_soam` ✓, `ngpc_seq` ✓ (SFX séquencés) |
 | **Roguelite / Donjon** | `ngpc_procgen` ✓, `ngpc_cavegen` ✓, `ngpc_rng` ✓, `ngpc_room` ✓, `ngpc_transition` ✓, `ngpc_pool` ✓, `ngpc_aabb` ✓, `ngpc_entity` ✓, `ngpc_fsm` ✓, `ngpc_anim` ✓, `ngpc_inventory` ✓, `ngpc_score` ✓, `ngpc_soam` ✓, `ngpc_hud` ✓, `ngpc_seq` ✓ (fanfares niveau) |
