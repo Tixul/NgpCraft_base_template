@@ -432,6 +432,55 @@ if (sel != MENU_NONE) {
 
 ---
 
+## `ngpc_motion` — Buffer d'inputs et détection de patterns
+**Type :** .h + .c · **RAM :** 34 octets · **Makefile :** `OBJS += src/ngpc_motion/ngpc_motion.rel`
+
+Buffer circulaire 32 frames + détection de séquences directionnelles fighting-game style (quarter-circle, double-tap, charge…).
+Enregistre chaque frame : direction D-pad (nibble haut) + boutons pressés en rising-edge (nibble bas).
+La détection est flexible : les frames neutres entre deux steps sont ignorés.
+
+| Élément | Description |
+|---|---|
+| `NgpcMotionBuf` | Buffer 34 octets RAM par entité (frames + head + count) |
+| `NgpcMotionPattern` | Pattern en ROM : `steps[]` + `count` + `window` (frames) |
+| `ngpc_motion_init(buf)` | Initialise le buffer |
+| `ngpc_motion_push(buf, held, pressed)` | Enregistre le frame courant (appeler 1× par frame) |
+| `ngpc_motion_test(buf, pat)` | Retourne 1 si le pattern est détecté |
+| `ngpc_motion_scan(buf, pats, count)` | Teste un tableau de patterns, retourne l'index du premier trouvé ou `0xFF` |
+| `ngpc_motion_clear(buf)` | Vide le buffer (évite re-trigger après déclenchement) |
+| `MDIR_N/U/D/L/R/UR/UL/DR/DL` | Directions (nibble haut) |
+| `MDIR_ANY` | Wildcard direction (accepte tout) |
+| `MBTN_A/B/OPT` | Boutons (nibble bas, combinables avec `\|`) |
+| `NGPC_MOTION_FINAL_WINDOW` | Fenêtre (frames) pour matcher le dernier step (défaut : 4) |
+
+```c
+/* Définir les patterns en ROM */
+static const u8 _qcf_steps[]   = { MDIR_D, MDIR_DR, MDIR_R | MBTN_A };
+static const u8 _dp_steps[]    = { MDIR_R, MDIR_D, MDIR_DR | MBTN_A };
+static const u8 _dtap_steps[]  = { MDIR_R, MDIR_N, MDIR_R };
+
+static const NgpcMotionPattern QCF_A  = { _qcf_steps,  3, 20 };
+static const NgpcMotionPattern DP_A   = { _dp_steps,   3, 20 };
+static const NgpcMotionPattern DTAP_R = { _dtap_steps, 3, 15 };
+
+static NgpcMotionBuf motion_buf;
+ngpc_motion_init(&motion_buf);
+
+/* Chaque frame (avant la logique jeu) : */
+ngpc_motion_push(&motion_buf, ngpc_pad_held, ngpc_pad_pressed);
+
+if (ngpc_motion_test(&motion_buf, &QCF_A)) {
+    ngpc_motion_clear(&motion_buf);
+    fire_fireball();
+}
+if (ngpc_motion_test(&motion_buf, &DP_A)) {
+    ngpc_motion_clear(&motion_buf);
+    fire_uppercut();
+}
+```
+
+---
+
 ## `ngpc_easing` — Fonctions de lissage
 **Type :** header-only · **RAM :** 0 octet · **Makefile :** rien · **Dépend de :** ngpc_fixed
 
@@ -1608,4 +1657,5 @@ for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
 | **Puzzle** | `ngpc_menu` ✓, `ngpc_timer` ✓, `ngpc_tween` ✓, `ngpc_easing` ✓, `ngpc_fsm` ✓, `ngpc_grid` ✓, `ngpc_pushblock` ✓ (blocs poussables), `ngpc_score` ✓, `ngpc_transition` ✓, `ngpc_seq` ✓ (jingle victoire) |
 | **Course (top-down)** | `ngpc_vehicle` ✓, `ngpc_tilecol` ✓, `ngpc_fixed` ✓, `ngpc_camera` ✓, `ngpc_anim` ✓, `ngpc_timer` ✓, `ngpc_hud` ✓, `ngpc_score` ✓, `ngpc_soam` ✓, `ngpc_transition` ✓, `ngpc_seq` ✓ (musique/SFX) |
 | **Action top-down** | `ngpc_actor` ✓, `ngpc_bullet` ✓, `ngpc_fsm` ✓, `ngpc_aabb` ✓, `ngpc_anim` ✓, `ngpc_particle` ✓, `ngpc_entity` ✓, `ngpc_path` ✓, `ngpc_wave` ✓, `ngpc_score` ✓, `ngpc_inventory` ✓, `ngpc_hud` ✓, `ngpc_soam` ✓, `ngpc_seq` ✓ (SFX séquencés) |
+| **Fighting / Beat'em up** | `ngpc_motion` ✓ (quarter-circle, DP, double-tap), `ngpc_anim` ✓, `ngpc_aabb` ✓, `ngpc_fsm` ✓, `ngpc_pool` ✓, `ngpc_timer` ✓, `ngpc_hud` ✓, `ngpc_soam` ✓, `ngpc_score` ✓, `ngpc_transition` ✓, `ngpc_seq` ✓ (SFX coups) |
 | **Roguelite / Donjon** | `ngpc_procgen` ✓, `ngpc_cavegen` ✓, `ngpc_rng` ✓, `ngpc_room` ✓, `ngpc_transition` ✓, `ngpc_pool` ✓, `ngpc_aabb` ✓, `ngpc_entity` ✓, `ngpc_fsm` ✓, `ngpc_anim` ✓, `ngpc_inventory` ✓, `ngpc_score` ✓, `ngpc_soam` ✓, `ngpc_hud` ✓, `ngpc_seq` ✓ (fanfares niveau) |
