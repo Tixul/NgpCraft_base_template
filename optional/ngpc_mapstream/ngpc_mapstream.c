@@ -239,3 +239,13 @@ void ngpc_mapstream_update(NgpcMapStream *ms,
     ms->prev_cam_tx = cam_tx;
     ms->prev_cam_ty = cam_ty;
 }
+
+void ngpc_mapstream_write_tile(const NgpcMapStream *ms,
+                               const u16 NGP_FAR *map_tiles,
+                               s16 wx, s16 wy)
+{
+    volatile u16 *base = ms_map_base(ms->plane);
+    u8 vc = (u8)((u16)wx & 0x1Fu);
+    u8 vr = (u8)((u16)wy & 0x1Fu);
+    ms_put(base, vc, vr, ms_get(map_tiles, ms->map_w, ms->map_h, wx, wy));
+}

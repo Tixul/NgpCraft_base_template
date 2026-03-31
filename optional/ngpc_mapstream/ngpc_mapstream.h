@@ -116,4 +116,13 @@ void ngpc_mapstream_update(NgpcMapStream *ms,
          : (py) > NGPC_MS_CAM_MAX_Y(ms) ? NGPC_MS_CAM_MAX_Y(ms) \
          : (py)))
 
+/* Restore a single world tile (wx, wy) from the map ROM into VRAM.
+ * Use this to undo tile corruption from text overlays or other direct VRAM
+ * writes. wx/wy: world tile coordinates (out-of-bounds writes 0 safely).
+ * Typical use: restore tiles overwritten by a debug text overlay before
+ * writing the next frame's text to the same world position. */
+void ngpc_mapstream_write_tile(const NgpcMapStream *ms,
+                               const u16 NGP_FAR *map_tiles,
+                               s16 wx, s16 wy);
+
 #endif /* NGPC_MAPSTREAM_H */
