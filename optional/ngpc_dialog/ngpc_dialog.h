@@ -80,7 +80,7 @@
 typedef struct {
     const char *text;          /* texte courant (ROM)              */
     const char **choices;      /* tableau de choix (NULL si aucun) */
-    u8  plane;                 /* plan tilemap                     */
+    u8  plane;                 /* packed: plane bits0-1, pal bits2-5 */
     u8  bx, by;                /* position tile de la boîte        */
     u8  bw, bh;                /* largeur/hauteur en tiles         */
     u8  char_idx;              /* position courante dans le texte  */
@@ -131,6 +131,8 @@ u8 ngpc_dialog_update(NgpcDialog *d);
  * 1 si la boîte est ouverte et en cours.
  * Utiliser pour bloquer le gameplay pendant le dialogue.
  */
-#define ngpc_dialog_is_open(d)  ((d)->flags & _DLG_OPEN)
+#define ngpc_dialog_is_open(d)   ((d)->flags & _DLG_OPEN)
+#define ngpc_dialog_plane(d)     ((u8)((d)->plane & 0x03u))
+#define ngpc_dialog_palette(d)   ((u8)(((d)->plane >> 2) & 0x0Fu))
 
 #endif /* NGPC_DIALOG_H */
