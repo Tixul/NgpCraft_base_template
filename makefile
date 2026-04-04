@@ -14,7 +14,12 @@ NAME = main
 OBJ_DIR = build/obj
 TMP_DIR = build/tmp
 OUTPUT_DIR = bin
-PYTHON = py -3.11
+# Auto-detect Python: prefer 'py -3' (Windows Launcher), fall back to 'python3', then 'python'
+ifeq ($(OS),Windows_NT)
+    PYTHON := $(shell py -3 --version >NUL 2>&1 && echo py -3 || (python3 --version >NUL 2>&1 && echo python3 || echo python))
+else
+    PYTHON := $(shell command -v python3 2>/dev/null && echo python3 || echo python)
+endif
 CC900_CPU ?= -Nb2
 
 # ---- Feature flags (sync with src/core/ngpc_config.h defaults) ----
