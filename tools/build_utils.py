@@ -92,11 +92,11 @@ def cmd_asm(src: str, obj: str) -> int:
         print("asm900 not found (set THOME or PATH).", file=sys.stderr)
         return 2
 
-    # ASM900 rejects CRLF line endings (Fatal-152). Normalize to LF in-place
-    # if needed so that git autocrlf or zip extraction cannot break the build.
+    # ASM900 requires CRLF line endings (Fatal-152 otherwise). Normalize to
+    # CRLF in-place if needed so that LF-only checkouts don't break the build.
     raw = open(src, "rb").read()
-    if b"\r\n" in raw:
-        open(src, "wb").write(raw.replace(b"\r\n", b"\n"))
+    if b"\r\n" not in raw and b"\n" in raw:
+        open(src, "wb").write(raw.replace(b"\n", b"\r\n"))
 
     # asm900 always writes <source_basename>.rel next to the source file.
     # Run it from the source directory so the output lands predictably.
