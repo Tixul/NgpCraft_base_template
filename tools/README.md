@@ -143,8 +143,10 @@ python tools/ngpc_project_init.py C:/dev/MonJeu --dry-run   # prévisualise sans
 ### `build_utils.py`
 **Helpers cross-platform appelés par le Makefile.**
 
-N'est pas destiné à être lancé directement. Utilisé en interne par les cibles `make clean`,
-`make` (déplacement de la ROM finale `.ngc`, conversion interne `.s24 → .ngp`).
+N'est pas destiné à être lancé directement. Utilisé en interne par toutes les cibles `make` :
+- `compile` : invoque `cc900` depuis son propre dossier (nécessaire car `cc900` cherche `thc1`/`thc2` en chemin relatif). Le chemin de `cc900` est détecté depuis `THOME\BIN\cc900.exe` (variable définie par `build.bat` via `compilerPath`).
+- `asm` : invoque `asm900` depuis le dossier source, puis déplace le `.rel` vers `build/obj/`.
+- `clean`, `move`, `s242ngp` : nettoyage et déplacement des artefacts.
 
 ---
 

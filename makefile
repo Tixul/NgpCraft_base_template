@@ -130,8 +130,7 @@ $(OBJ_DIR)/%.rel: %.c
 	$(PYTHON) tools/build_utils.py compile $< $@ $(CC900_CPU) $(CDEFS)
 
 $(OBJ_DIR)/%.rel: %.asm
-	$(PYTHON) -c "import os; os.makedirs(r'$(dir $@)', exist_ok=True)"
-	asm900 -g $< -o $@
+	$(PYTHON) tools/build_utils.py asm $< $@
 
 $(TARGET_NGP): makefile ngpc.lcf $(OBJS)
 	$(PYTHON) tools/build_utils.py link $(TARGET_ABS) ngpc.lcf $(OBJS) $(LINK_LIBS)

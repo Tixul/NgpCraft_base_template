@@ -79,6 +79,40 @@ def cmd_move(name: str, output_dir: str) -> int:
     return 0
 
 
+def cmd_asm(src: str, obj: str) -> int:
+    src = os.path.normpath(src)
+    obj = os.path.normpath(obj)
+
+    os.makedirs(os.path.dirname(obj) or ".", exist_ok=True)
+
+    thome = os.environ.get("THOME", "")
+    asm900_from_thome = os.path.join(thome, "BIN", "asm900.exe") if thome else ""
+    asm900 = asm900_from_thome if (asm900_from_thome and os.path.exists(asm900_from_thome)) else shutil.which("asm900")
+    if not asm900:
+        print("asm900 not found (set THOME or PATH).", file=sys.stderr)
+        return 2
+
+    # asm900 always writes <source_basename>.rel next to the source file.
+    # Run it from the source directory so the output lands predictably.
+    src_dir = os.path.dirname(src) or "."
+    src_name = os.path.basename(src)
+    rel_name = os.path.splitext(src_name)[0] + ".rel"
+    rel_out = os.path.join(src_dir, rel_name)
+
+    result = subprocess.run(
+        [asm900, "-g", src_name],
+        cwd=src_dir,
+        check=False,
+    )
+    if result.returncode != 0:
+        return result.returncode
+
+    # Move the .rel to the expected build/obj path.
+    if os.path.normpath(rel_out) != os.path.normpath(obj):
+        shutil.move(rel_out, obj)
+    return 0
+
+
 def cmd_compile(src: str, obj: str, extra_flags: list[str]) -> int:
     src = os.path.normpath(src)
     obj = os.path.normpath(obj)
@@ -93,11 +127,19 @@ def cmd_compile(src: str, obj: str, extra_flags: list[str]) -> int:
         print("cc900 not found (set THOME or PATH).", file=sys.stderr)
         return 2
 
-    include_flags = ["-Isrc", "-Isrc/core", "-Isrc/gfx", "-Isrc/fx", "-Isrc/audio"]
-    cmd = [cc900, "-c", "-O3"] + include_flags + extra_flags + [src, "-o", obj]
+    # cc900 invokes thc1/thc2 as relative paths, so it must run from its own
+    # directory. Use absolute paths for source, output, and includes.
+    cc900_dir = os.path.dirname(os.path.abspath(cc900))
+    src_abs = os.path.abspath(os.path.join(project_root, src))
+    obj_abs = os.path.abspath(os.path.join(project_root, obj))
+    include_flags = [
+        "-I" + os.path.abspath(os.path.join(project_root, d))
+        for d in ("src", "src/core", "src/gfx", "src/fx", "src/audio")
+    ]
+    cmd = [cc900, "-c", "-O3"] + include_flags + extra_flags + [src_abs, "-o", obj_abs]
     result = subprocess.run(
         cmd,
-        cwd=project_root,
+        cwd=cc900_dir,
         check=False,
     )
     return result.returncode
@@ -165,6 +207,11 @@ def main(argv: list[str]) -> int:
             print("Usage: build_utils.py move <name> <output_dir>", file=sys.stderr)
             return 2
         return cmd_move(argv[2], argv[3])
+    if cmd == "asm":
+        if len(argv) != 4:
+            print("Usage: build_utils.py asm <src.asm> <obj.rel>", file=sys.stderr)
+            return 2
+        return cmd_asm(argv[2], argv[3])
     if cmd == "compile":
         if len(argv) < 4:
             print("Usage: build_utils.py compile <src.c> <obj.rel> [cc900_flags...]", file=sys.stderr)

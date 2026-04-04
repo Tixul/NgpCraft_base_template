@@ -241,13 +241,12 @@ You need the Toshiba TLCS-900/H toolchain and a working `make` command:
 | `s242ngp` | S-record to NGP cartridge ROM |
 | `make` | Build driver used by the template |
 | `system.lib` | Optional — flash save works without it (standalone stubs) |
-| `Python 3.11` (`py`) | Build helpers used by make targets |
+| `Python 3.10+` | Build helpers used by make targets (`python`, `python3`, or `py` — auto-detected) |
 
 Recommended Windows setup:
-- install the Toshiba tools in a folder such as `C:\t900` or `C:\ngpcbins\T900`
-- make sure its `bin\` contains `cc900`, `asm900`, `tulink`, `tuconv`, `s242ngp`
+- install the Toshiba tools in `C:\t900` (default) — the `bin\` subfolder must contain `cc900`, `asm900`, `tulink`, `tuconv`, `s242ngp`
 - make sure `make` is callable from the terminal
-- make sure `py -3.11` works from the terminal
+- make sure `python` (or `python3` / `py`) works from the terminal — any Python 3.10+ installation is fine
 
 Template expectation:
 - `build.bat` sets `THOME` from `compilerPath` for the Toshiba tools
@@ -264,16 +263,16 @@ Optional:
 
 ### Windows
 
-1. Edit `build.bat`: set `compilerPath` to your Toshiba toolchain folder
+1. Edit `build.bat` if needed: `compilerPath` defaults to `C:\t900` — change it only if your toolchain is installed elsewhere
 2. Optional: set `emuPath` if you want auto-launch after build
 3. Optional: place `system.lib` at the project root only if you want the legacy system.lib flash path
 4. Run `build.bat`
 5. Output: `bin/main.ngc`
 
 Minimal Windows checklist:
-- required: valid `compilerPath`
+- required: valid `compilerPath` (default: `C:\t900`)
 - required: `make` available in terminal
-- required: `py -3.11` available
+- required: `python` (or `python3` / `py`) available in terminal — Python 3.10+
 - optional: `system.lib`
 - optional: `utils\NGPRomResize.exe`
 - optional: emulator path
