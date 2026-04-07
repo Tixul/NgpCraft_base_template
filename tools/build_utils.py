@@ -92,12 +92,6 @@ def cmd_asm(src: str, obj: str) -> int:
         print("asm900 not found (set THOME or PATH).", file=sys.stderr)
         return 2
 
-    # ASM900 requires CRLF line endings (Fatal-152 otherwise). Normalize to
-    # CRLF in-place if needed so that LF-only checkouts don't break the build.
-    raw = open(src, "rb").read()
-    if b"\r\n" not in raw and b"\n" in raw:
-        open(src, "wb").write(raw.replace(b"\n", b"\r\n"))
-
     # asm900 always writes <source_basename>.rel next to the source file.
     # Run it from the source directory so the output lands predictably.
     src_dir = os.path.dirname(src) or "."
@@ -142,7 +136,13 @@ def cmd_compile(src: str, obj: str, extra_flags: list[str]) -> int:
         "-I" + os.path.abspath(os.path.join(project_root, d))
         for d in ("src", "src/core", "src/gfx", "src/fx", "src/audio")
     ]
-    cmd = [cc900, "-c", "-O3"] + include_flags + extra_flags + [src_abs, "-o", obj_abs]
+    abs_extra_flags = []
+    for flag in extra_flags:
+        if flag.startswith("-I") and not os.path.isabs(flag[2:]):
+            abs_extra_flags.append("-I" + os.path.abspath(os.path.join(project_root, flag[2:])))
+        else:
+            abs_extra_flags.append(flag)
+    cmd = [cc900, "-c", "-O3"] + include_flags + abs_extra_flags + [src_abs, "-o", obj_abs]
     result = subprocess.run(
         cmd,
         cwd=cc900_dir,
