@@ -241,12 +241,13 @@ You need the Toshiba TLCS-900/H toolchain and a working `make` command:
 | `s242ngp` | S-record to NGP cartridge ROM |
 | `make` | Build driver used by the template |
 | `system.lib` | Optional — flash save works without it (standalone stubs) |
-| `Python 3.10+` | Build helpers used by make targets (`python`, `python3`, or `py` — auto-detected) |
+| `Python 3.11` (`py`) | Build helpers used by make targets |
 
 Recommended Windows setup:
-- install the Toshiba tools in `C:\t900` (default) — the `bin\` subfolder must contain `cc900`, `asm900`, `tulink`, `tuconv`, `s242ngp`
+- install the Toshiba tools in a folder such as `C:\t900` or `C:\ngpcbins\T900`
+- make sure its `bin\` contains `cc900`, `asm900`, `tulink`, `tuconv`, `s242ngp`
 - make sure `make` is callable from the terminal
-- make sure `python` (or `python3` / `py`) works from the terminal — any Python 3.10+ installation is fine
+- make sure `py -3.11` works from the terminal
 
 Template expectation:
 - `build.bat` sets `THOME` from `compilerPath` for the Toshiba tools
@@ -263,16 +264,16 @@ Optional:
 
 ### Windows
 
-1. Edit `build.bat` if needed: `compilerPath` defaults to `C:\t900` — change it only if your toolchain is installed elsewhere
+1. Edit `build.bat`: set `compilerPath` to your Toshiba toolchain folder
 2. Optional: set `emuPath` if you want auto-launch after build
 3. Optional: place `system.lib` at the project root only if you want the legacy system.lib flash path
 4. Run `build.bat`
 5. Output: `bin/main.ngc`
 
 Minimal Windows checklist:
-- required: valid `compilerPath` (default: `C:\t900`)
+- required: valid `compilerPath`
 - required: `make` available in terminal
-- required: `python` (or `python3` / `py`) available in terminal — Python 3.10+
+- required: `py -3.11` available
 - optional: `system.lib`
 - optional: `utils\NGPRomResize.exe`
 - optional: emulator path
@@ -282,18 +283,35 @@ Default distributed-template behavior:
 - flash save stays disabled by default (`NGP_ENABLE_FLASH_SAVE=0`)
 - enable with `make NGP_ENABLE_FLASH_SAVE=1` — no `system.lib` needed
 
-### Manual (any platform)
+### Linux
 
+The Toshiba toolchain (`cc900`, `asm900`, `tulink`, `tuconv`, `s242ngp`) runs under Wine. `build_utils.py` wraps the tools automatically — no manual Wine invocation needed.
+
+**Prerequisites:**
+```bash
+sudo apt install wine make python3
 ```
-export THOME=/path/to/T900
-export PATH=$PATH:$THOME/bin
+
+**Set `THOME` in the makefile** (edit once, no shell config needed):
+```makefile
+# makefile
+THOME = /home/user/toshiba
+```
+Or pass it on the command line:
+```bash
+make THOME=/home/user/toshiba
+```
+
+**Build:**
+```bash
 make clean && make && make move_files
 ```
 
-Manual build checklist:
-- `cc900`, `asm900`, `tulink`, `tuconv`, `s242ngp` reachable in `PATH`
-- `make` reachable in `PATH`
-- Python available for `tools/build_utils.py`
+Linux build checklist:
+- `wine` installed and working
+- `THOME` pointing to the Toshiba toolchain folder (must contain `BIN/cc900.exe`, `BIN/asm900.exe`, etc.)
+- `make` and `python3` available
+- `.asm` CRLF normalization is handled automatically by `build_utils.py`
 
 Enable flash save (no system.lib required):
 
