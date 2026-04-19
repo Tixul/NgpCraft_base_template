@@ -85,7 +85,7 @@ _ngpc_flash_erase_asm:
 
 ; ===========================================================================
 ; _ngpc_flash_write_asm
-; Writes 512 bytes from data to the flash slot at the given absolute offset.
+; Writes SAVE_SIZE bytes (default 256, BC=0x0001) from data to the flash slot at the given absolute offset.
 ; Parameters:
 ;   (xsp+4)  = data:   source address (const void *)
 ;   (xsp+8)  = offset: flash dest relative to cart base (u32, e.g. 0x1FA000 + slot*256)

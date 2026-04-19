@@ -23,8 +23,9 @@ THOME ?=
 export THOME
 
 # Auto-detect Python: prefer 'py -3' (Windows Launcher), fall back to 'python3', then 'python'
+# If auto-detection fails, override here: PYTHON := py -3
 ifeq ($(OS),Windows_NT)
-    PYTHON := $(shell py -3 --version >NUL 2>&1 && echo py -3 || (python3 --version >NUL 2>&1 && echo python3 || echo python))
+    PYTHON := $(shell (where py >nul 2>nul && echo py -3) || (where python3 >nul 2>nul && echo python3) || echo python)
 else
     PYTHON := $(shell command -v python3 2>/dev/null && echo python3 || echo python)
 endif
@@ -153,7 +154,7 @@ endif
 $(TARGET_NGP): makefile ngpc.lcf $(OBJS)
 	$(PYTHON) tools/build_utils.py link $(TARGET_ABS) ngpc.lcf $(OBJS) $(LINK_LIBS)
 	$(PYTHON) tools/build_utils.py s242ngp $(TARGET_S24)
-	$(PYTHON) -c "import os, shutil; os.makedirs('$(OUTPUT_DIR)', exist_ok=True); shutil.copy2('$(TARGET_NGP)', os.path.join('$(OUTPUT_DIR)', '$(NAME).ngc'))"
+	$(PYTHON) tools/build_utils.py copy $(TARGET_NGP) $(OUTPUT_DIR)/$(NAME).ngc
 
 clean:
 	$(PYTHON) tools/build_utils.py clean

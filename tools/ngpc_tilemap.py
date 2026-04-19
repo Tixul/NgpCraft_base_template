@@ -89,7 +89,17 @@ def extract_tiles(
     img = Image.open(path).convert("RGBA")
     w, h = img.size
     if (w % 8) or (h % 8):
-        raise ValueError("Image dimensions must be multiples of 8 (got %dx%d)" % (w, h))
+        pw = ((w + 7) // 8) * 8
+        ph = ((h + 7) // 8) * 8
+        print(
+            f"Warning: {path} size {w}x{h} is not a multiple of 8 — "
+            f"auto-padding to {pw}x{ph} with transparent pixels.",
+            file=sys.stderr,
+        )
+        padded = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
+        padded.paste(img, (0, 0))
+        img = padded
+        w, h = pw, ph
 
     px = img.load()
     tw = w // 8
