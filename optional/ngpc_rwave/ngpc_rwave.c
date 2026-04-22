@@ -161,6 +161,7 @@ void ngpc_rwave_init(NgpcRWave *rw,
     rw->dir_wave_timer   = 0u;
     rw->wave_count       = 0u;
     rw->tier             = 0u;
+    rw->max_waves        = 0u; /* 0 = infinite (default) */
 
     rw->wave_remaining   = 0u;
     rw->wave_spawn_timer = 0u;
@@ -175,26 +176,54 @@ void ngpc_rwave_init(NgpcRWave *rw,
     rw->active           = 1u;
 }
 
+static void rwave_warmup(NgpcRWave *rw)
+{
+    /* Xorshift is sensitive to low-entropy seeds: the first few outputs are
+     * strongly correlated with the seed. Spin the generator a handful of
+     * times so the initial rolls used by pick_new_wave are well mixed. */
+    u8 k;
+    for (k = 0u; k < 8u; k++) (void)rng_next(rw);
+}
+
 void ngpc_rwave_seed(NgpcRWave *rw, u16 seed)
 {
     rw->rng_state = (seed == 0u) ? 0xA5A5u : seed;
+    rwave_warmup(rw);
+}
+
+/* Additional per-director stir (e.g. the wave index inside a scene) so two
+ * directors initialized from the same RTC second do not produce the same
+ * output sequence. Callers that use the stir variant should pass a value
+ * that is unique per director -- a counter or wave index is sufficient. */
+void ngpc_rwave_seed_stir(NgpcRWave *rw, u16 stir)
+{
+    rw->rng_state ^= (u16)(stir * 0x9E37u + 0x5A5Fu);
+    if (rw->rng_state == 0u) rw->rng_state = 0xA5A5u;
+    rwave_warmup(rw);
 }
 
 void ngpc_rwave_seed_rtc(NgpcRWave *rw)
 {
     NgpcTime t;
     u16 s;
+    u16 sec2, min2, hr2;
 
     ngpc_rtc_get(&t);
-    /* BCD fields XOR'd with shifts. `second` changes every second, which
-     * is the dominant entropy source. `extra` stirs in weekday too. */
-    s = (u16)t.second
-      ^ (u16)((u16)t.minute << 2)
-      ^ (u16)((u16)t.hour   << 5)
-      ^ (u16)((u16)t.day    << 3)
-      ^ (u16)t.extra;
+    /* BCD fields are packed as two nibbles (tens|units). The units nibble
+     * changes every tick; the tens nibble changes every 10 ticks. Splitting
+     * and combining both nibbles gives roughly 7 bits of entropy per second
+     * instead of ~3 when the raw BCD byte is used as-is. */
+    sec2 = (u16)((u16)t.second ^ (u16)((u16)t.second << 4));
+    min2 = (u16)((u16)t.minute ^ (u16)((u16)t.minute << 3));
+    hr2  = (u16)((u16)t.hour   ^ (u16)((u16)t.hour   << 5));
+    s = sec2
+      ^ (u16)(min2 << 2)
+      ^ (u16)(hr2  << 7)
+      ^ (u16)((u16)t.day    << 1)
+      ^ (u16)((u16)t.extra  << 11);
     if (s == 0u) s = 0xA5A5u;
     rw->rng_state = s;
+    rwave_warmup(rw);
 }
 
 void ngpc_rwave_pause(NgpcRWave *rw)  { rw->active = 0u; }
@@ -203,6 +232,15 @@ void ngpc_rwave_resume(NgpcRWave *rw) { rw->active = 1u; }
 u8 ngpc_rwave_update(NgpcRWave *rw, NgpcRWaveSpawn *out)
 {
     if (!rw->active) return 0u;
+
+    /* Hard cap: once `max_waves` full waves have been emitted and the current
+     * wave is exhausted, the director stops emitting. max_waves == 0 keeps the
+     * infinite behaviour (default for roguelite-style endless spawners). */
+    if (rw->max_waves != 0u
+        && rw->wave_count >= rw->max_waves
+        && rw->wave_remaining == 0u) {
+        return 0u;
+    }
 
     /* Waiting for next wave to start. */
     if (rw->dir_wave_timer > 0u) {

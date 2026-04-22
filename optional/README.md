@@ -1535,10 +1535,22 @@ Director procédural à tiers : tire au hasard le type, le nombre, le côté d'e
 | `ngpc_rwave_init(rw, tiers, tier_count, type_count, w, h)` | Initialise le director |
 | `ngpc_rwave_seed(rw, seed)` | Seed manuel reproductible |
 | `ngpc_rwave_seed_rtc(rw)` | Seed depuis la RTC hardware (second/minute/hour/day) |
+| `ngpc_rwave_seed_stir(rw, stir)` | Ajoute une entropie complémentaire si plusieurs directors partagent la même seed |
 | `ngpc_rwave_pause/resume(rw)` | Gèle/reprend l'émission de spawns |
 | `ngpc_rwave_update(rw, *out)` | Avance d'un frame, remplit `*out` et retourne 1 si spawn dû |
 
-**Champs tweakables après init :** `offscreen_margin` (def. 8), `axis_jitter_max` (def. 20), `waves_per_tier` (def. 10), `intra_interval_min/max` (def. 6/10), `sides_mask` (def. ALL).
+**Champs tweakables après init :** `offscreen_margin` (def. 8), `axis_jitter_max` (def. 20), `waves_per_tier` (def. 10), `intra_interval_min/max` (def. 6/10), `sides_mask` (def. ALL), `max_waves` (0 = infini).
+
+```c
+/* Optionnel : si plusieurs directors sont seedés pendant la même seconde */
+ngpc_rwave_seed_rtc(&s_rw);
+ngpc_rwave_seed_stir(&s_rw, 1u);
+```
+
+```c
+/* Optionnel : limiter le director à 12 vagues */
+s_rw.max_waves = 12u;
+```
 
 ```c
 static const NgpcRWaveTier s_tiers[] = {

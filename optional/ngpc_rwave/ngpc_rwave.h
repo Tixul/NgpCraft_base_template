@@ -105,6 +105,11 @@ typedef struct {
     u16 wave_count;
     u8  tier;
 
+    /* Optional hard cap on total waves emitted. 0 = infinite (default);
+     * any non-zero value stops the director after `max_waves` full waves
+     * have been picked (ngpc_rwave_update returns 0 from then on). */
+    u16 max_waves;
+
     /* Current wave state. */
     u8  wave_remaining;
     u8  wave_spawn_timer;
@@ -146,6 +151,12 @@ void ngpc_rwave_seed(NgpcRWave *rw, u16 seed);
  * Gives a different sequence at every boot as long as >=1 second elapses
  * between reboots. Requires ngpc_rtc.h to be available. */
 void ngpc_rwave_seed_rtc(NgpcRWave *rw);
+
+/* Stir additional entropy into the current RNG state (on top of whatever
+ * ngpc_rwave_seed*() left there). Call after seeding when several directors
+ * share the same RTC second -- otherwise each one produces the same rolls.
+ * Pass a per-director unique value (e.g. the director's index). */
+void ngpc_rwave_seed_stir(NgpcRWave *rw, u16 stir);
 
 /* Pause / resume the director. A paused director emits nothing but keeps
  * its state (tier/wave_count) intact. */

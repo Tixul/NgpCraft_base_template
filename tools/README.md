@@ -107,6 +107,24 @@ python tools/ngpc_palette_viewer.py GraphX --out GraphX
 
 ---
 
+### `ngpc_font_export.py`
+**PNG de font 8×8 → C/H compatible avec `ngpc_text_*`.**
+
+Convertit une planche de glyphes en tiles 2bpp NGPC pour remplacer la fonte système
+sans changer les appels à `ngpc_text_print`, `ngpc_text_print_dec` ou `ngpc_text_print_hex`.
+
+```sh
+python tools/ngpc_font_export.py font.png -o GraphX/ngpc_custom_font
+python tools/ngpc_font_export.py font.png -o GraphX/ngpc_custom_font -n myfont
+```
+
+Formats de PNG supportés :
+- `128x48` : ASCII 32–127, `tile_base` par défaut = 32
+- `256x24` : ASCII 32–127, `tile_base` par défaut = 32
+- `256x32` : ASCII 0–127, `tile_base` par défaut = 0
+
+---
+
 ## Compression
 
 ### `ngpc_compress.py`
