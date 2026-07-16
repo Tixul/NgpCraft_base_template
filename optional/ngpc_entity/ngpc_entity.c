@@ -54,6 +54,21 @@ void ngpc_entity_draw_all(void)
     }
 }
 
+#if ENTITY_KILL_HOOK
+/*
+ * Discipline B : cache d'abord le sprite (via le hook fourni par le jeu),
+ * puis désactive. Le garde `active` évite un double-hide si kill est appelé
+ * deux fois sur la même entité.
+ */
+void ngpc_entity_kill(NgpcEntity *e)
+{
+    if (e->active) {
+        entity_on_kill(e);   /* fourni par le jeu : ngpc_sprite_hide(...) */
+        e->active = 0;
+    }
+}
+#endif
+
 NgpcEntity *ngpc_entity_find(u8 type)
 {
     u8 i;
@@ -78,6 +93,6 @@ void ngpc_entity_kill_all(u8 type)
     u8 i;
     for (i = 0; i < ENTITY_COUNT; i++) {
         if (ngpc_entities[i].active && ngpc_entities[i].type == type)
-            ngpc_entities[i].active = 0;
+            ngpc_entity_kill(&ngpc_entities[i]);   /* route par la discipline choisie */
     }
 }
