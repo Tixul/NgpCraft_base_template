@@ -1821,6 +1821,56 @@ for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
 
 ---
 
+## `ngpc_link` — Jeu à 2 consoles par câble link ✅ Validé (émulateur)
+
+**Type :** 2 fichiers `.c` · **RAM :** ~30 o + 2 × charge utile · **ROM :** ~1,5 Ko
+**Makefile :** `OBJS += $(OBJ_DIR)/src/ngpc_link/ngpc_link_com.rel` **et** `.../ngpc_link.rel`
+
+Session 2 joueurs complète au-dessus des appels COM du BIOS : trouve le pair,
+attribue les rôles, échange un paquet par frame, checksum, perte et reprise de
+liaison. Marche sur câble réel **et** dans NgpCraft Emulator (2 fenêtres, LAN,
+salon en ligne) — c'est le même chemin BIOS, aucun code spécifique.
+
+| Élément | Description |
+|---|---|
+| `ngpc_link_init(seed)` | ouvre le canal, commence à chercher un pair |
+| `ngpc_link_update()` | une fois par frame, après avoir rempli `ngpc_link_out[]` — **ne bloque jamais** |
+| `ngpc_link_state` | `OFF` / `SEARCHING` / `READY` / `LOST` / `MISMATCH` |
+| `ngpc_link_host` | 1 sur une seule des deux consoles (rôle négocié) |
+| `ngpc_link_out[]` / `ngpc_link_in[]` | charge utile émise / dernière reçue |
+| `ngpc_link_fresh` | 1 seulement la frame où un paquet est tombé |
+| `ngpc_link_set_role(h)` | forcer hôte/invité si ton menu a déjà tranché |
+| `ngpc_link_stats` | octets, paquets, checksums cassés, envois sautés, silence |
+| `NGPC_LINK_PAYLOAD` | taille utile par frame (1..32, défaut 4) — **identique des deux côtés** |
+
+```c
+ngpc_link_out[0] = ngpc_pad_held;   /* AVANT l'update */
+ngpc_link_update();
+if (ngpc_link_ready()) {
+    u8 peer_pad = ngpc_link_in[0];
+}
+```
+
+> **Le câble est un tuyau d'octets entre deux consoles indépendantes**, pas une
+> simulation partagée : pas de lockstep imposé, pas de rollback — et jamais d'attente.
+>
+> **Qui joue à gauche ?** Celui qui a ouvert l'écran link en premier. Le module
+> annonce depuis combien de temps chaque console cherche (résolution : la frame) et le
+> plus ancien devient hôte. Aucune question n'est posée au joueur — surtout pas
+> « appuyez sur A des deux côtés », qui ne départage rien.
+>
+> **Jeu versus, où les deux consoles simulent le même match ?** Mets
+> `NGPC_LINK_RX_QUEUE` à 4 et lis avec `ngpc_link_recv()` : en lockstep on consomme un
+> paquet par pas de simulation, et sans file deux paquets arrivés dans la même frame se
+> recouvrent — le pas perdu désynchronise en silence. Et prévois **2 pas de retard**
+> d'entrée : l'aller-retour du fil fait deux frames, pas une.
+>
+> Détail, pièges mesurés (`ei 6` du BIOS qui coupe le VBlank, valeurs de retour cc900
+> en `-O3`, vecteurs série installés par `COMINIT`) et harnais de preuve :
+> `optional/ngpc_link/README.md`.
+
+---
+
 > Les modules suivants sont **déjà dans le core** et n'ont pas besoin d'un module optionnel :
 > `ngpc_input` · `ngpc_text` · `ngpc_sprite` · `ngpc_math` (rand, sin, cos) · `ngpc_palfx` (fade, flash) · `ngpc_flash` (save 256 B)
 
@@ -1838,3 +1888,4 @@ for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
 | **Action top-down** | `ngpc_actor` ✓, `ngpc_bullet` ✓, `ngpc_fsm` ✓, `ngpc_aabb` ✓, `ngpc_anim` ✓, `ngpc_particle` ✓, `ngpc_entity` ✓, `ngpc_path` ✓, `ngpc_wave` ✓, `ngpc_score` ✓, `ngpc_inventory` ✓, `ngpc_hud` ✓, `ngpc_soam` ✓, `ngpc_seq` ✓ (SFX séquencés) |
 | **Fighting / Beat'em up** | `ngpc_motion` ✓ (quarter-circle, DP, double-tap), `ngpc_anim` ✓, `ngpc_aabb` ✓, `ngpc_fsm` ✓, `ngpc_pool` ✓, `ngpc_timer` ✓, `ngpc_hud` ✓, `ngpc_soam` ✓, `ngpc_score` ✓, `ngpc_transition` ✓, `ngpc_seq` ✓ (SFX coups) |
 | **Roguelite / Donjon** | `ngpc_procgen` ✓, `ngpc_cavegen` ✓, `ngpc_dungeongen` ✓ (salles scrollables riches), `ngpc_rng` ✓, `ngpc_room` ✓, `ngpc_transition` ✓, `ngpc_pool` ✓, `ngpc_aabb` ✓, `ngpc_entity` ✓, `ngpc_fsm` ✓, `ngpc_anim` ✓, `ngpc_inventory` ✓, `ngpc_score` ✓, `ngpc_soam` ✓, `ngpc_hud` ✓, `ngpc_seq` ✓ (fanfares niveau) |
+| **2 joueurs (câble link)** | `ngpc_link` ✓ (session + paquets), `ngpc_rng` ✓ (graine décidée par l'hôte), `ngpc_menu` ✓ (écran « héberger / rejoindre »), `ngpc_hud` ✓ (état de la liaison) — se combine avec n'importe quel genre ci-dessus |

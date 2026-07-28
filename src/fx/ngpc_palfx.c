@@ -211,7 +211,7 @@ u8 ngpc_palfx_flash(u8 plane, u8 pal_id, u16 color, u8 duration)
     if (slot == 0xFF) return 0xFF;
 
     if (duration == 0) {
-        /* duration=0 : rien à faire, pas de flash */
+    /* duration = 0: nothing to do, no flash */
         return 0xFF;
     }
 
