@@ -1,5 +1,11 @@
 ﻿# NgpCraft_base_template
 
+> **Inactivity policy (2026-10-01):** disable the BIOS ten-minute idle request
+> by clearing `User_Answer` / `HW_USR_ANSWER` (0x6F86) bit 6; keep reserved bit 5
+> clear (`HW_USR_ANSWER &= (u8)0x9F;`). Continue handling every nonzero
+> `HW_USR_SHUTDOWN` (0x6F85), including battery and POWER requests. This is a
+> precaution pending investigation, not a confirmed hardware-defect diagnosis.
+
 A modern, open-source development template for the **Neo Geo Pocket Color** handheld console.
 Written from scratch using the public hardware specification. No legacy code, no binary blobs.
 
@@ -96,6 +102,12 @@ Some optional modules are production-ready, others are still evolving and should
 - `examples/ASSET_PIPELINE.md`: end-to-end asset workflow (tilemap -> compress -> runtime load)
 - `examples/dma_example.c`: MicroDMA usage patterns (Timer0/Timer1, re-arm, no CHAIN)
 - `examples/dma_raster_example.c`: ngpc_dma_raster parallax example (no CPU HBlank ISR)
+- `examples/road3d_example.c`: forward-view pseudo-3D scaling road for a racer — the
+  Densha de Go! 2 mechanism, recovered by runtime measurement of the retail cartridge
+  (one sheared plane, quadratic profile sampling, curvature as a sliding window)
+- `starters/racer/`: **OVER REV racing engine**, a standalone starter project (own core,
+  `build.py`): raster-DMA scanline road, bends and hills, driving physics with
+  automatic/manual gearbox, roadside scenery, HUD, pause. See [starters/README.md](starters/README.md).
 
 ---
 
@@ -362,7 +374,8 @@ make NGP_PROFILE_RELEASE=1
 void ngpc_sys_patch(void);      // Power-off bug patch (prototype firmware only, no-op on retail)
 void ngpc_init(void);           // Call first. Sets up interrupts, viewport.
 u8   ngpc_is_color(void);       // 1 = NGPC Color, 0 = mono NGP
-u8   ngpc_get_language(void);   // LANG_ENGLISH (0) or LANG_JAPANESE (1)
+u8   ngpc_get_language(void);   // LANG_JAPANESE (0) or LANG_ENGLISH (1) — SysWork.txt order
+void ngpc_set_vblank_hook(NgpcVblankFn fn); // short work run at the TOP of every VBlank (0 = none)
 void ngpc_shutdown(void);       // Power off (BIOS call)
 void ngpc_load_sysfont(void);   // Load built-in font into tile RAM
 void ngpc_memcpy(dst, src, n);  // Byte copy
@@ -525,7 +538,8 @@ void ngpc_input_set_repeat(u8 delay, u8 rate); // delay/rate in frames
 ```
 
 **Button masks:** `PAD_UP`, `PAD_DOWN`, `PAD_LEFT`, `PAD_RIGHT`,
-`PAD_A`, `PAD_B`, `PAD_OPTION`, `PAD_POWER`
+`PAD_A`, `PAD_B`, `PAD_OPTION`. `PAD_POWER` (bit 7) is **not** a button of the
+NGPC and **not** the power switch — only `HW_USR_SHUTDOWN` reports the switch.
 
 ```c
 // Example: react to new A press only (not held)
@@ -575,55 +589,54 @@ biasing every gameplay roll). Hardware confirmed on the current u16 version
 
 ### ngpc_flash -- Save
 
+Two-bank journal, ported from OVER REV (2026-10). Build with `NGP_ENABLE_FLASH_SAVE=1`.
+
 ```c
-void ngpc_flash_init(void);             // Call at startup
-void ngpc_flash_save(const void *data); // Write 256 bytes to flash
-void ngpc_flash_load(void *data);       // Read 256 bytes from flash
-u8   ngpc_flash_exists(void);           // Check if valid save exists
+void ngpc_flash_init(void);              // once, after ngpc_init()
+u8   ngpc_flash_ready(void);             // 0 = unknown cart / image overlaps the banks: all refused
+u8   ngpc_flash_exists(void);            // a valid record was found
+void ngpc_flash_load(void *data);        // SAVE_SIZE bytes
+u8   ngpc_flash_save(void *data);        // 1 = written AND read back identical
+u16  ngpc_flash_verify(const void *data);
+u8   ngpc_flash_slots_used(void);
+u8   ngpc_flash_erase(void);             // destructive, explicit "erase save" screen only
 ```
 
-Flash has limited write cycles. Avoid saving every frame.
-
-**IMPORTANT — magic number**: `ngpc_flash_exists()` checks the first 4 bytes of the save area.
-The save struct MUST start with `{ 0xCA, 0xFE, 0x20, 0x26 }`.
+- **Where**: the two 8 KB blocks 0x6000 below the top of the chip, found from the
+  cartridge size the BIOS stores at `0x6C58` — `0x07A000`/`0x078000` on 4 Mbit,
+  `0x0FA000`/`0x0F8000` on 8 Mbit, `0x1FA000`/`0x1F8000` on 16 Mbit. Unknown size → refused.
+- **Record** = `SAVE_SIZE` bytes (default 256, `-DSAVE_SIZE=512` for more): starts with the
+  magic `{ 0xCA, 0xFE, 0x20, 0x26 }` (written by you); the last 8 bytes are the journal
+  (sequence, CRC16, tag, commit byte programmed last) and are overwritten by `ngpc_flash_save()`.
+  Usable bytes: `NGPC_FLASH_PAYLOAD` (= `SAVE_SIZE - 8`, magic included).
+- A full bank rolls over to the other one; the bank holding the newest valid record is
+  **never** erased. A write cut by a power loss is ignored at the next boot.
+- Interrupts are masked during each write/erase (`di` … `ei 0`): call from the main
+  loop only, raster DMA paused, **on a screen change** from a RAM dirty flag — never
+  per button press. Clear the dirty flag only when `ngpc_flash_save()` returns 1.
 
 ```c
-// Save struct with magic as first field
 typedef struct {
-    u8 magic[4];   /* always { 0xCA, 0xFE, 0x20, 0x26 } */
-    u8 hp;
-    u8 level;
-    /* ... up to 252 more bytes */
-} SaveData;
+    u8  magic[4];                      /* { 0xCA, 0xFE, 0x20, 0x26 } */
+    u8  version;                       /* your layout version */
+    u8  hp, level, pad0;
+    u8  pad[NGPC_FLASH_PAYLOAD - 8];
+    u8  journal[NGPC_FLASH_TRAILER];   /* stamped by the driver */
+} SaveData;                            /* sizeof == SAVE_SIZE */
 
-// Save (on button press, not every frame!)
-void save_game(void) {
-    SaveData s;
-    s.magic[0] = 0xCA; s.magic[1] = 0xFE;
-    s.magic[2] = 0x20; s.magic[3] = 0x26;
-    s.hp    = player.hp;
-    s.level = player.level;
-    ngpc_flash_save(&s);
-}
+static SaveData s;                     /* static: not on the stack */
+static u8 dirty;
 
-// Load at startup
-void load_game(void) {
-    if (ngpc_flash_exists()) {
-        SaveData s;
-        ngpc_flash_load(&s);
-        player.hp    = s.hp;
-        player.level = s.level;
-    }
-}
+if (ngpc_flash_exists()) ngpc_flash_load(&s);       /* at startup */
+...
+if (dirty && ngpc_flash_save(&s)) dirty = 0u;        /* when leaving a screen */
 ```
 
-Implementation status (2026-02-14):
-- `ngpc_flash_save()` uses standalone AMD stubs executed from RAM — no `system.lib` required.
-- Uses `VECT_FLASHERS` (erase block) then `VECT_FLASHWRITE` (write 256 bytes).
-- Default save slot for 2MB ROM layout uses flash offset `0x1FA000`
-  (CPU-visible address `0x200000 + 0x1FA000 = 0x3FA000`).
-- BIOS vector IDs are centralized in `ngpc_hw.h` and used by modules (`sys`, `timing`, `rtc`, `flash`).
-- Real-hardware note (2026-03-18): this module is considered hardware-valide under the current downstream criterion because it ships in games that run correctly on real hardware. Save persistence edge cases remain a separate topic for future hardening.
+Status (2026-10-08): `tools/save_check/save_check.py` (emulator, 256 and 512 bytes) — 163 saves /
+5 bank switches, reboots, 8 cut points, 8 corruptions, dirty inactive bank, sequence wrap,
+4/8/16 Mbit, refusals, 0 `flash-busy-fetch`; negative control without `di` loses the ROM.
+**Not validated on hardware.** Records of the pre-2026-10 append-only driver are not read.
+Details: [docs/NGPC_FLASH_SAVE_GUIDE.md](docs/NGPC_FLASH_SAVE_GUIDE.md).
 
 ### ngpc_bitmap -- Bitmap mode
 
@@ -1391,3 +1404,8 @@ No code was copied from any existing framework.
 
 Hardware reference: "Everything You Always Wanted To Know About NeoGeo Pocket Color"
 by NeeGee (2000), supplemented by the official SNK NGPC SDK documentation.
+
+
+## Optional QR codes
+
+[ngpc_qr](optional/ngpc_qr/README.md) generates text/URL QR codes with only 16 character tiles. C89, no heap, caller-owned context. V2-M (38 characters) or V3-L (77 characters); selectable plane, palette, tile slots and position. Example: [qr_example.c](examples/qr_example.c). Optional, not linked by default. Both profiles tested with cc900 and emulator screenshot decoding.

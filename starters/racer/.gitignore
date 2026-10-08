@@ -1,0 +1,7 @@
+build/
+*.abs
+*.map
+*.s24
+*.ngp
+*.rel
+__pycache__/

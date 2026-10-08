@@ -1,0 +1,36 @@
+{
+  "rom": "bin/raceengine.ngc",
+  "rom_bytes": 32588,
+  "rom_sha256": "601ed1446e4a0487a064d18f53c6afbfeabe25c9979d8070576978ec281f45f7",
+  "full_game_sha256": "a40e9e0ff658301b8fdcb7823f033553d900591e3dac13a19e259e2c420a9da3",
+  "checks": [
+    "direct race boot",
+    "acceleration and automatic shifts",
+    "steering both directions",
+    "braking",
+    "pause freezes time and distance",
+    "resume",
+    "restart from pause",
+    "clock saturation",
+    "finish stops the clock",
+    "restart after finish",
+    "profile ROM byte equivalence",
+    "stack canary",
+    "sky palettes intact throughout full run",
+    "complete first-track run using ordinary controller input"
+  ],
+  "static_ram_end": "0x504f",
+  "observed_unused_stack_bytes": 6777,
+  "finish_test": "controlled last-metre fixture, not a complete driven race",
+  "tested_on": "native emulator with BIOS, cart_wait=3; no physical console validation",
+  "complete_run": {
+    "emulated_frames": 10932,
+    "distance": 28140,
+    "ticks": 11010
+  },
+  "date": "2026-10-04",
+  "source_audit": "Single track, car, panorama and original first-track roadside graphics; private game modules and secret-code definitions absent",
+  "course_revision": "Original first-track roadside projection and sprite-size ladder; base COMET physics restored; road-edge sampled at wheel height; six-unit bend easing restored",
+  "pacing": "Original two-VBlank scheduling with bounded catch-up after a small rendering overrun",
+  "standalone_archive_rebuild": "PASS: rebuilt from extracted archive, ROM byte-identical"
+}

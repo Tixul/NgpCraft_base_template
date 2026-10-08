@@ -17,8 +17,6 @@
 
 void ngpc_vsync(void)
 {
-    static u8 s_power_hold = 0;
-
     /* Wait until g_vb_counter changes (incremented by VBI at 60 Hz).
      * This busy-waits but lets the CPU execute other code in the
      * interrupt handler between checks. */
@@ -34,22 +32,20 @@ void ngpc_vsync(void)
     ngpc_vramq_clear_dropped();
 #endif
 
-    /* POWER button: BIOS requests shutdown by setting HW_USR_SHUTDOWN.
+    /* BIOS shutdown requests include low battery and POWER.
+     * Inactivity requests are disabled by ngpc_init; handle every request here.
      * Calling the BIOS shutdown vector from a normal (non-ISR) context is
      * more robust on real hardware than doing it inside the VBlank ISR. */
     if (HW_USR_SHUTDOWN)
         ngpc_shutdown();
 
-    /* Fallback: some setups expose POWER as a joypad bit (PAD_POWER) without
-     * reliably latching HW_USR_SHUTDOWN. Support a "hold POWER" gesture. */
-    if (HW_JOYPAD & PAD_POWER) {
-        if (s_power_hold < 255) s_power_hold++;
-        if (s_power_hold >= 30) {
-            ngpc_shutdown();
-        }
-    } else {
-        s_power_hold = 0;
-    }
+    /* NO "HOLD POWER" FALLBACK ON THE JOYPAD BYTE. It used to shut down when
+     * bit 7 of Sys_Lever (0x6F82) stayed set for 30 frames. SysWork.txt gives
+     * all 8 bits of that byte and none is the power switch: bit 7 is no button
+     * of the NGPC at all (the doc ties it to an external NEOGEO controller).
+     * The power switch is only reported by User_Shutdown above (bit 7 of
+     * 0x6F85). The game was switching itself off on a bit it knew nothing
+     * about. */
 }
 
 u8 ngpc_in_vblank(void)

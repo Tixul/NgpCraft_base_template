@@ -87,15 +87,34 @@
 #define NGPC_LINK_RX_QUEUE 0
 #endif
 
-/* Wire protocol version. Bump it if the packet format changes. */
-#define NGPC_LINK_PROTO 1
+/* Wire protocol version. Bump it if the packet format changes.
+ *
+ * 2 -- HELLO carries the ECHO field (7-byte body instead of 5): each console
+ *      repeats the last token it heard, and the roles are only decided once that
+ *      echo comes back as our own. See link_on_hello for what it fixes.
+ *
+ * ⚠️ THIS BYTE DOES NOT CATCH A v1 PEER, and assuming it did was wrong. It lives
+ * INSIDE the body, and what changed between 1 and 2 is the body's LENGTH -- so a
+ * v1 parser takes v2's sixth byte as the checksum and a v2 parser eats v1's
+ * checksum as body. No frame validates, and the version is never read. MEASURED
+ * on two consoles through the real BIOS path: both sit in SEARCHING for ever with
+ * bad_sum climbing, NOT in MISMATCH. Still safe -- no session, no role, no data --
+ * but the symptom to look for is "bytes crossing, bad_sum rising, never READY".
+ * The version byte guards a changed MEANING at a fixed size; it cannot guard a
+ * changed size. */
+#define NGPC_LINK_PROTO 2
 
 /* ---- Session states (ngpc_link_state) ---- */
 #define NGPC_LINK_OFF        0  /* ngpc_link_init() not called yet */
 #define NGPC_LINK_SEARCHING  1  /* announcing, nobody has answered */
 #define NGPC_LINK_READY      2  /* peer found, roles fixed, data flowing */
 #define NGPC_LINK_LOST       3  /* nothing received for NGPC_LINK_TIMEOUT frames */
-#define NGPC_LINK_MISMATCH   4  /* peer found but different protocol or payload size */
+/* Peer found, its HELLO parsed, and its version or payload size disagrees with ours.
+ * ⚠️ Reaching this state requires the frame to VALIDATE first, so it catches a peer
+ * that packs the same-sized packet differently -- not one whose packets are a
+ * different LENGTH. Those never checksum, and both consoles stay in SEARCHING with
+ * bad_sum climbing (measured: see check_v1_v2.py). */
+#define NGPC_LINK_MISMATCH   4
 
 /* ---- Diagnostic counters ---- */
 typedef struct {

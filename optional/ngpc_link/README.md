@@ -98,6 +98,49 @@ separate consoles that started within a few frames, and identical draws are
 simply repeated. No question is ever put to the player. If your game already
 asked ("create" / "join"), call `ngpc_link_set_role()` instead.
 
+⛔ **Announcing is not deciding, and telling them apart is the whole of it.** A
+HELLO is a *snapshot*: by the time the peer's game code reads it, it is a couple
+of frames old on hardware and more behind a queued burst. So a console must never
+weigh its own **live** counter against that snapshot — it would be comparing its
+present to the other's past, and the console that started second still looks
+bigger whenever the announcement is older than the gap between the two starts.
+That is a **both-host session**, and it was reported from the field before it was
+understood here.
+
+Two rules fix it, and both are in `link_on_hello`:
+
+1. the search counter **freezes at first contact**, so what we announce and what
+   we compare cannot drift apart;
+2. every HELLO **echoes the last token heard**, and the roles are decided only
+   when that echo comes back as our own — at which instant both consoles provably
+   hold the same pair, and `>` on one pair cannot disagree.
+
+📏 Measured by [`role_sim/`](role_sim/README.md), sweeping start skew 0-12 frames
+against announcement lag 1-12: **300 disagreements in 624 runs before, 0 after**,
+with the failures forming an exact `lag > skew` triangle. The cost is one round
+trip instead of one announcement — worst-case agreement went from 25 to 51 frames.
+
+⚠️ This is wire protocol **version 2** (`NGPC_LINK_PROTO`), because the HELLO body
+grew from 5 bytes to 7. **Rebuild both consoles** — and know exactly what happens
+if you do not, because it is not what you would guess:
+
+> 📏 **Measured, two emulated consoles through the real BIOS path: a v1 and a v2
+> build do NOT report `NGPC_LINK_MISMATCH`. They sit in `SEARCHING` for ever,
+> with `bad_sum` climbing (25 and 56 over 400 frames while 616/450 bytes crossed).**
+
+The reason is structural, and it is worth understanding before you rely on the
+version byte for anything: `NGPC_LINK_PROTO` lives **inside** the HELLO body, and
+what changed is the body's **length**. A v1 parser reads five body bytes and takes
+v2's sixth as the checksum, which fails; a v2 parser waits for seven and eats v1's
+checksum as body. No frame ever validates, so the version byte is never reached.
+The version check protects against a changed *meaning* of a same-sized packet — it
+cannot protect against a changed *size*.
+
+What it does still guarantee is the part that matters: **no session, no role
+elected, no data delivered**. And the state is diagnosable — bytes crossing while
+`bad_sum` climbs and the state never leaves `SEARCHING` means "the other console
+runs a different build", not "no cable". Worth putting on your link screen.
+
 ## Three traps, all measured
 
 1. **No BIOS wrapper returns a value.** At `-O3`, a cc900 function whose body is
@@ -133,6 +176,12 @@ handshake up rather than breaking it.
   consoles: a lone console does not freeze, two find each other, a cut cable is
   reported, the session rebuilds itself, a 16-byte payload crosses intact, and two
   builds with different payload sizes report `MISMATCH` instead of mixing bytes.
+  All six gates green, session established at frame 15.
+- `role_sim/` — the same election swept across start skew and announcement lag, off
+  the console, in a second. See [its README](role_sim/README.md) for the numbers.
+- `check_v1_v2.py` — what a v1 build and a v2 build really do to each other. It
+  exists because the answer written here first was wrong, and measuring is cheaper
+  than being confident.
 A complete game built on this module — input lockstep, settings sent by the host,
 disconnection handling — is published separately as an example project; its
 `LINK_2P.md` is the design write-up.

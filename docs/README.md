@@ -50,6 +50,7 @@ NgpCraft_base_template/
 │   └── ASSET_PIPELINE.md        ← workflow complet PNG → ROM
 │   └── dma_example.c            ← patterns MicroDMA (Timer0/Timer1, re-arm, eviter CHAIN)
 │   └── dma_raster_example.c     ← exemple ngpc_dma_raster (parallax sans ISR HBlank CPU)
+│   └── road3d_example.c         ← route pseudo-3D vue avant (mecanisme Densha de Go! 2)
 │
 └── optional/                     ← modules optionnels
     └── README.md                ← liste et usage des modules optionnels
@@ -89,3 +90,8 @@ sans RAG supplémentaire pour la grande majorité des tâches de gameplay.
 ### Potentiellement utile plus tard
 - [ ] `NGPC_LINKER_SCRIPT.md` — sections mémoire, symbols `_DataROM/_Bss`, placement ROM/RAM, contraintes 12 KB
 - [ ] `NGPC_DEBUG_GUIDE.md` — workflow debug sur hardware : assert écran, log ring buffer, profiler raster, lecture état émulateur
+
+
+## QR codes optionnels
+
+Voir [ngpc_qr : API, profils, mémoire et intégration](../optional/ngpc_qr/README.md), ainsi que [l'exemple de page QR](../examples/qr_example.c). Codes de résultat au format d'OVER REV (URL + pseudo + Base32 + CRC16) : section « Result codes » du même README.

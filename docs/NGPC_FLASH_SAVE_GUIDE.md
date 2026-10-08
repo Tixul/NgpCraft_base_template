@@ -1,47 +1,44 @@
 # NGPC Flash Save — Complete Guide
 
-**Template 2026 — validated on real hardware (2026-03-18)**
+**Template 2026 — two-bank journal (2026-10-08), ported from OVER REV.**
+Emulator-validated (`tools/save_check/save_check.py`); **not yet validated on
+hardware in this generic form.** The research below (§3, §11) is what made the
+first hardware saves work; §4 and §10 are what OVER REV then learned the hard way.
 
 ---
 
 ## 1. Quick start
 
 ```c
-// ── build flags ────────────────────────────────────────────────────
-// -DNGP_ENABLE_FLASH_SAVE=1   (disabled by default in the distributed template)
+// Build: make NGP_ENABLE_FLASH_SAVE=1     (links ngpc_flash_asm.rel, no system.lib)
 
-// ── no system.lib required ─────────────────────────────────────────
-// Flash save is self-contained: ngpc_flash_asm.asm embeds standalone AMD stubs.
-// Enable with: make NGP_ENABLE_FLASH_SAVE=1
-
-// ── define your save struct ────────────────────────────────────────
 typedef struct {
-    u8  magic[4];      /* MUST be { 0xCA, 0xFE, 0x20, 0x26 } */
+    u8  magic[4];                      /* MUST be { 0xCA, 0xFE, 0x20, 0x26 } */
+    u8  version;                       /* your layout version, after the magic */
     u8  level;
     u16 score;
-    u8  lives;
-    /* ... up to SAVE_SIZE-4 bytes of payload */
-} MySave;
+    u8  pad[NGPC_FLASH_PAYLOAD - 8];   /* 8 = the fields above */
+    u8  journal[NGPC_FLASH_TRAILER];   /* last 8 bytes: stamped by the driver */
+} MySave;                              /* sizeof(MySave) == SAVE_SIZE */
 
-// ── at startup ─────────────────────────────────────────────────────
+static MySave s;                       /* static: SAVE_SIZE bytes, not on the stack */
+static u8 dirty;
+
+// ── at startup, after ngpc_init() ───────────────────────────────────
 ngpc_flash_init();
-if (ngpc_flash_exists()) {
-    MySave s;
-    ngpc_flash_load(&s);
-    g_level = s.level;
-    g_score = s.score;
-} else {
-    /* no save found: use defaults */
-}
+if (ngpc_flash_exists()) ngpc_flash_load(&s);
+else { /* defaults, then s.magic = CA FE 20 26 */ }
 
-// ── when saving ────────────────────────────────────────────────────
-MySave s;
-s.magic[0] = 0xCA;  s.magic[1] = 0xFE;
-s.magic[2] = 0x20;  s.magic[3] = 0x26;
-s.level = g_level;
-s.score = g_score;
-ngpc_flash_save(&s);       /* safe to call multiple times per session */
+// ── during play: change RAM only ────────────────────────────────────
+s.score = g_score; dirty = 1u;
+
+// ── when LEAVING a screen (never per button press, never in an ISR) ─
+if (dirty && ngpc_flash_save(&s)) dirty = 0u;   /* 0 = keep dirty, retry later */
 ```
+
+`ngpc_flash_ready()` returns 0 when the cartridge size is unknown or the image
+reaches the save banks: every call is then refused. Show it somewhere — a
+refused save looks exactly like a working one until the console is switched off.
 
 ---
 
@@ -52,8 +49,8 @@ ngpc_flash_save(&s);       /* safe to call multiple times per session */
 | Address (CPU) | Region | Note |
 |---|---|---|
 | `0x200000` | Cart ROM base (CS0) | 16Mbit = 2 MB |
-| `0x3F8000` | Block 32 (F16_B32, 8 KB) | Save-capable |
-| `0x3FA000` | **Block 33 (F16_B33, 8 KB)** | **Used by this driver** |
+| `0x3F8000` | **Block 32 (F16_B32, 8 KB)** | **Bank B of the journal** |
+| `0x3FA000` | **Block 33 (F16_B33, 8 KB)** | **Bank A of the journal** |
 | `0x3FC000` | Block 34 (F16_B34, 16 KB) | Reserved for BIOS — DO NOT USE |
 
 ### Block sizes (16Mbit cart)
@@ -65,11 +62,51 @@ ngpc_flash_save(&s);       /* safe to call multiple times per session */
 | **32, 33** | **8 KB** | **~5–15 ms** | **✓ Safe** |
 | 34 | 16 KB | — | Reserved — never use |
 
-**Block 33 was chosen** because it is 8 KB (fast erase, safe under watchdog) and SNK games use it as the save area for 16Mbit carts.
+**Blocks 32 and 33 are used** because they are 8 KB (fast erase, safe under the
+watchdog) and SNK games save there on 16 Mbit carts.
+
+### The address depends on the cartridge size
+
+The save blocks sit **0x6000 below the top of the chip**, so each size puts them
+at a different address. The BIOS stores the size at **`0x6C58`** at power-on
+(`0` none, `1` = 4 Mbit, `2` = 8 Mbit, `3` = 16 Mbit); its own flash routine
+reads the same byte.
+
+| Cart | Bank A (block) | Bank B | CPU address of A |
+|---|---|---|---|
+| 4 Mbit | `0x07A000` (`0x09`) | `0x078000` | `0x27A000` |
+| 8 Mbit | `0x0FA000` (`0x11`) | `0x0F8000` | `0x2FA000` |
+| 16 Mbit | `0x1FA000` (`0x21`) | `0x1F8000` | `0x3FA000` |
+
+A hard-coded `0x1FA000` does not "fail" on a smaller chip: it **erases 8 KB
+elsewhere** — inside the image, i.e. the running code. A write only touches its
+own slot, so the bug stays harmless until the first erase, then the console
+dies: the worst profile, it shows up for the player who played longest.
+**Unknown value = do not save**, never "take the default".
+
+⚠️ An emulator cannot catch this: it presents the capacity your address makes
+correct, and derives `0x6C58` from it. Open case: on a Flash Masta 32 Mbit,
+games writing block `0x11` corrupt their own space — read `0x6C58` on the target
+cart before the first save.
 
 ### Why the BIOS makes flash write hard
 
-During any flash operation, the BIOS executes **DI** (disable interrupts). This prevents the VBL ISR from clearing the watchdog. Erase of a 64 KB block takes 50–200 ms; the watchdog fires at ~100 ms → console reset. 8 KB blocks erase in ~5–15 ms and are safe.
+During any flash operation the BIOS executes **DI**, and so must your own code:
+a chip being programmed or erased answers reads with **status bits**, not data.
+The erase stub runs from RAM for that reason, but the interrupt handlers are
+still in the cartridge — an interrupt taken mid-operation fetches its handler
+from status bits. Toshiba: *"all interrupts are prohibited during system calls
+related to flash memory management"* (SysCall.txt). Hence `di` … `ei 0` in both
+entry points of `ngpc_flash_asm.asm` (bytes `06 07` / `06 00`).
+
+**An emulator whose flash keeps serving ROM during the operation never shows
+this.** It cost OVER REV a hard crash "at the end of a race, only on the console".
+The NgpCraft emulator now models the busy window and counts a
+`flash-busy-fetch` fault; the save bench removes `di` as a negative control and
+the ROM is lost at the first real erase.
+
+With interrupts off, the VBL ISR cannot clear the watchdog: a 64 KB erase
+(50–200 ms) outlasts it (~100 ms) → reset. 8 KB blocks are safe.
 
 ---
 
@@ -149,67 +186,66 @@ ld   xde3,xde        ; primary   → bank-3        ✓
 
 ---
 
-## 4. Append-only slot design
-
-### Rationale
-
-Because `CLR_FLASH_RAM` fails on its 2nd call per session, the driver must avoid calling erase more than once per session. The append-only design achieves this by never erasing mid-session: each save writes to the next empty slot, and erase only occurs when the entire block is full.
+## 4. Two-bank journal (current design)
 
 ### Layout
 
-```
-Block 33 — 8 KB (0x1FA000..0x1FBFFF)
-SAVE_SIZE = 256 bytes → NUM_SLOTS = 32
-
-Offset    Slot   Status after boot
-────────  ─────  ──────────────────────────────────────────────────
-0x1FA000  0      0xCA 0xFE 0x20 0x26 ... (written, valid)
-0x1FA100  1      0xCA 0xFE 0x20 0x26 ... (written, valid — newest)
-0x1FA200  2      0xFF 0xFF 0xFF 0xFF ... (empty — next write goes here)
-0x1FA300  3      0xFF ...
-...
-0x1FBF00  31     0xFF ...
-```
-
-### Write algorithm
+Each bank is 8 KB = `8192 / SAVE_SIZE` slots (32 at 256 bytes, 16 at 512).
+Slot `i` of bank A is at `A + i*SAVE_SIZE`; bank B is `A - 0x2000`.
 
 ```
-find_next_slot():
-    for i in 0..31:
-        if SAVE_ADDR[i * 256] == 0xFF:
-            return i
-    return 32  (full)
-
-ngpc_flash_save(data):
-    slot = find_next_slot()
-    if slot == 32:               // block full
-        ngpc_flash_erase_asm()   // standalone AMD erase — 1st call of session, always OK
-        slot = 0
-    offset = 0x1FA000 + slot * 256
-    ngpc_flash_write_asm(data, offset)
+offset      field
+0..3        magic CA FE 20 26                         (game)
+4..N-9      game payload                              (game)
+N-8..N-5    sequence number, u32 little-endian        (driver)
+N-4..N-3    CRC16-CCITT (poly 0x1021, init 0xFFFF,
+            no reflection) of bytes 0..N-5, LE        (driver)
+N-2         journal tag 0x4A                          (driver)
+N-1         commit byte 0x00 — the LAST byte programmed
 ```
 
-### Read algorithm
+### Read (ngpc_flash_init)
 
-```
-find_last_slot():
-    for i in 31..0:              // scan newest first
-        if SAVE_ADDR[i*256 + 0..3] == {0xCA,0xFE,0x20,0x26}:
-            return i
-    return 0xFF                  // no valid save
+Scan both banks; a record counts if magic, tag and commit byte match and its
+CRC is right. The newest sequence wins, compared modulo 2^32 (so `0xFFFFFFFF`
+→ `0` keeps working). The CRC is computed only for a record that could become
+current, so a full journal does not slow the boot.
 
-ngpc_flash_load(data):
-    slot = find_last_slot()
-    if slot == 0xFF: return
-    copy 256 bytes from SAVE_ADDR[slot * 256] to data
-```
+### Write (ngpc_flash_save)
 
-### Why erase is called at most once per session
+1. Refuse if not ready or if the buffer does not start with the magic (it would
+   be written and never found again).
+2. Next slot after the current one, in the current bank, **whose every byte
+   reads 0xFF**. One byte is not enough: a slot cut mid-write cannot be
+   reprogrammed (flash only turns 1 into 0) and the old driver retried it for
+   ~18 s.
+3. Bank full → switch to the other bank. **The bank holding the newest valid
+   record is never erased.** The other one is erased only if it is not blank
+   already, then every byte is checked before anything is programmed.
+4. Stamp sequence + CRC + tag + commit in the caller's buffer, write through
+   `VECT_FLASHWRITE`, read the slot back. Only an identical readback makes it
+   current and returns 1.
 
-- At power-on, the block either has empty slots (≥ 1 byte == 0xFF at the right position) or all 32 slots are full.
-- **Case A — slots available:** saves go to slot 0, 1, 2, … until all 32 are used. Erase is triggered only when slot 32 is needed. In a typical session a game saves at most a handful of times → the block will never fill.
-- **Case B — block full at boot:** first save triggers erase (1st erase call → success), then writes to slot 0. Subsequent saves write to slot 1, 2, …, no more erases.
-- In neither case is the erase function called twice in the same session.
+A power loss at any point leaves the previous record valid: an unfinished
+write has no commit byte, an unfinished erase is in the other bank.
+
+### Cost
+
+Write: one BIOS call, interrupts off for the programming time of `SAVE_SIZE`
+bytes. Rollover: one 8 KB erase every `8192/SAVE_SIZE` saves, ~60 ms with
+interrupts off (emulator model: 57.5 ms) — music and VBlank stall for that
+long, so save on a screen change, never mid-action.
+
+### History: the append-only design it replaces
+
+Until 2026-10 the template wrote block 33 only, slot after slot, and erased it
+when full. It was built around `CLR_FLASH_RAM` failing on its 2nd call per
+session (§3, Bug 2), which the RAM erase stub (essai 18) no longer uses.
+Its defects, each found on a real console by OVER REV: no `di`; a hard-coded
+16 Mbit address; "empty slot" decided on one byte; the only copy of the save
+erased before the new one was written; no integrity check. The OVER REV v31
+journal fixed them; this driver is its game-independent version.
+Records written by the old driver are not read.
 
 ---
 
@@ -253,20 +289,15 @@ User-facing API functions (`ngpc_flash_save`, `ngpc_flash_load`) take plain `voi
 
 ## 7. Configuring SAVE_SIZE
 
-`SAVE_SIZE` is defined in `ngpc_flash.h`. It must be a **multiple of 256** (BIOS write granularity).
+A power of two from 256 to 8192, default 256 in `ngpc_flash.h`. Override it
+**globally** (`-DSAVE_SIZE=512` for every file that includes `ngpc_flash.h`),
+nothing to change in the assembly: the page count is passed at run time.
 
-| SAVE_SIZE | Payload bytes | NUM_SLOTS | `BC` in ASM |
-|---|---|---|---|
-| 256 (default) | 252 | 32 | `1` |
-| 512 | 508 | 16 | `2` |
-| 1024 | 1020 | 8 | `4` |
-
-If you change `SAVE_SIZE`, you **must also update `ld bc,N`** in `ngpc_flash_asm.asm`
-(in `_ngpc_flash_write_asm`, line `ld bc,0x0001`):
-
-```asm
-ld   bc,N       ; N = SAVE_SIZE / 256
-```
+| SAVE_SIZE | Game bytes (`NGPC_FLASH_PAYLOAD`, magic included) | Slots per bank |
+|---|---|---|
+| 256 (default) | 248 | 32 |
+| 512 | 504 | 16 |
+| 1024 | 1016 | 8 |
 
 ---
 
@@ -275,8 +306,9 @@ ld   bc,N       ; N = SAVE_SIZE / 256
 | File | Role |
 |---|---|
 | `src/core/ngpc_flash.h` | Public API and full documentation |
-| `src/core/ngpc_flash.c` | C implementation: slot scan, erase/write dispatch |
-| `src/core/ngpc_flash_asm.asm` | Standalone AMD erase/write stubs (no `system.lib` required) |
+| `src/core/ngpc_flash.c` | Journal: bank selection, scan, CRC, rollover, readback |
+| `src/core/ngpc_flash_asm.asm` | `di`-protected RAM erase stub + `VECT_FLASHWRITE` call (no `system.lib`) |
+| `tools/save_check/` | Emulator bench: test ROM + scenarios (needs `NGPC_EMU`, `NGPC_BIOS`) |
 | `system.lib` | Toshiba library — **optional**, only for `SYSTEM_LIB=<path>` compatibility path |
 | `SysCall.txt` (Toshiba SDK) | VECT_FLASHERS bug (p.299), VECT_FLASHWRITE params |
 | `SysLib.txt` (Toshiba SDK) | CLR_FLASH_RAM, WRITE_FLASH_RAM, FLASH_M_READ specs |
@@ -284,16 +316,27 @@ ld   bc,N       ; N = SAVE_SIZE / 256
 
 ---
 
-## 9. Diagnostic log codes (debug builds)
+## 9. Diagnostics
 
-Enable with `NGP_ENABLE_DEBUG=1` and `NGP_ENABLE_FLASH_SAVE=1`.
-
-| Code | Meaning |
+| Call | Tells you |
 |---|---|
-| `FERA:FF` | Block erased successfully (0xFF = blank) |
-| `FERA:CA` | Erase failed (0xCA = data still present) |
-| `FVFY:0000` | Flash matches data exactly — write OK |
-| `FVFY:NNNN` | N bytes differ — write or erase failed |
+| `ngpc_flash_ready()` | 0 = unknown cart size (`0x6C58`) or image reaching bank B: everything refused |
+| `ngpc_flash_cart_size()` | raw `0x6C58`: 1/2/3 = 4/8/16 Mbit |
+| `ngpc_flash_slots_used()` | slots taken in the current bank |
+| `ngpc_flash_verify(buf)` | bytes differing in the slot of the last attempt (0xFFFF = none) |
+
+Show a failed save on screen (e.g. "NOT SAVED - RETRY") by re-reading this
+state, not by remembering a flag: a console switched back on has no flag.
+
+### "The console switches itself off" is not always a crash
+
+`User_Shutdown` (`0x6F85`) is a bit field (SysWork.txt): bit 7 power switch,
+bit 6 ten minutes of inactivity, **bit 5 main battery too low**. A flash
+operation is the biggest current peak a cartridge makes, so tired batteries
+cross the threshold right then, and a game that obeys switches off — at the end
+of a race, late in a session, never in an emulator. Before hunting a bug: read
+the battery level (`0x6F80`, 0..0x3FF), show which bit fired before shutting
+down, try fresh batteries.
 
 ---
 
@@ -317,6 +360,34 @@ ld   xde3,(xsp+8)            // stack-rel to bank-3 = invalid encoding
 
 // ❌ FLASH_M_READ in production builds — debug-only per SysLib.txt
 calr FLASH_M_READ            // remove before shipping
+
+// ❌ Flash erase/write with interrupts enabled — crash on hardware only
+ld   (0x6E),0x14             // ... no `di` first
+
+// ❌ A hard-coded block address — erases the game on a smaller chip
+ld   xde,0x3FA000            // read 0x6C58 instead
+
+// ❌ "Empty slot" = first byte 0xFF — a torn slot cannot be reprogrammed
+if (SAVE_ADDR[slot * 256] == 0xFF) ...
+
+// ❌ Erasing the bank that holds the only valid copy, then writing
+```
+
+```c
+// ❌ A magic of your own: the driver only recognises CA FE 20 26.
+//    Put YOUR layout version in a field after the magic.
+static const u8 my_magic[4] = { 'I', 'D', 'G', 'C' };
+
+// ❌ One save per button press: 32 slots go fast and every rollover is an erase
+if (pad_pressed & PAD_LEFT) { opt ^= 1; ngpc_flash_save(&s); }
+// ✓ mark dirty in RAM, save once when leaving the screen
+
+// ❌ Clearing the dirty flag without proof
+ngpc_flash_save(&s); dirty = 0;
+// ✓ if (ngpc_flash_save(&s)) dirty = 0;   (1 = read back identical)
+
+// ❌ A "hold POWER" fallback on Sys_Lever bit 7 (0x6F82): no NGPC button is
+//    wired there and it is NOT the power switch. Only User_Shutdown (0x6F85).
 ```
 
 ---
@@ -335,3 +406,7 @@ Summary of key findings:
 | 16 | Manual Sharp erase, primary XDE | FERA:00CA | Writes silently ignored — user code can't drive /WE |
 | **17** | **Append-only slots** | **✓ SOLVED** | Avoids 2nd CLR_FLASH_RAM call entirely |
 | **18** | **Standalone AMD stubs (no system.lib)** | **✓ SOLVED** | Register 0x6E=0x14 enables /WE; stubs copied to RAM 0x6E00 and called from there |
+| 19 | OVER REV: 16 Mbit address hard-coded | Console off at the first erase | Erase landed in the image on another chip size → read `0x6C58` |
+| 20 | OVER REV: write/erase without `di` | Hard crash on console only | Interrupt fetched from a busy chip → `di` … `ei 0` |
+| 21 | OVER REV: append-only bank full | Progress silently stops being saved / only copy erased | → two-bank journal, never erase the current bank (v31, 2026-09-27) |
+| **22** | **Generic journal in the template** | **✓ emulator** (2026-10-08) | `tools/save_check/save_check.py`; hardware test pending |

@@ -24,8 +24,12 @@ export THOME
 
 # Auto-detect Python: prefer 'py -3' (Windows Launcher), fall back to 'python3', then 'python'
 # If auto-detection fails, override here: PYTHON := py -3
+# The null device depends on the SHELL make runs, not on the OS: with Git for
+# Windows on the PATH this make uses Git's sh.exe even from cmd, and `>nul`
+# then creates a real file named "nul" in the project (hard to delete).
 ifeq ($(OS),Windows_NT)
-    PYTHON := $(shell (where py >nul 2>nul && echo py -3) || (where python3 >nul 2>nul && echo python3) || echo python)
+    NULDEV := $(if $(findstring sh.exe,$(SHELL)),/dev/null,nul)
+    PYTHON := $(shell (where py >$(NULDEV) 2>$(NULDEV) && echo py -3) || (where python3 >$(NULDEV) 2>$(NULDEV) && echo python3) || echo python)
 else
     PYTHON := $(shell command -v python3 2>/dev/null && echo python3 || echo python)
 endif

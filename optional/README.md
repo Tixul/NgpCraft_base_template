@@ -1889,3 +1889,10 @@ if (ngpc_link_ready()) {
 | **Fighting / Beat'em up** | `ngpc_motion` ✓ (quarter-circle, DP, double-tap), `ngpc_anim` ✓, `ngpc_aabb` ✓, `ngpc_fsm` ✓, `ngpc_pool` ✓, `ngpc_timer` ✓, `ngpc_hud` ✓, `ngpc_soam` ✓, `ngpc_score` ✓, `ngpc_transition` ✓, `ngpc_seq` ✓ (SFX coups) |
 | **Roguelite / Donjon** | `ngpc_procgen` ✓, `ngpc_cavegen` ✓, `ngpc_dungeongen` ✓ (salles scrollables riches), `ngpc_rng` ✓, `ngpc_room` ✓, `ngpc_transition` ✓, `ngpc_pool` ✓, `ngpc_aabb` ✓, `ngpc_entity` ✓, `ngpc_fsm` ✓, `ngpc_anim` ✓, `ngpc_inventory` ✓, `ngpc_score` ✓, `ngpc_soam` ✓, `ngpc_hud` ✓, `ngpc_seq` ✓ (fanfares niveau) |
 | **2 joueurs (câble link)** | `ngpc_link` ✓ (session + paquets), `ngpc_rng` ✓ (graine décidée par l'hôte), `ngpc_menu` ✓ (écran « héberger / rejoindre »), `ngpc_hud` ✓ (état de la liaison) — se combine avec n'importe quel genre ci-dessus |
+
+
+### `ngpc_qr` — QR texte et URL
+
+[Documentation et intégration](ngpc_qr/README.md). Deux profils : V2-M compact et V3-L plein écran, avec seulement 16 tuiles de caractères. Encodeur C89 sans allocation, contexte indépendant du jeu ; renderer configurable SCR1/SCR2, palette et emplacement. Pas de domaine imposé. Exemple : `examples/qr_example.c`.
+
+`ngpc_qr_result` (facultatif) construit le texte de résultat au format d'OVER REV : `<URL><TAG>:<PSEUDO>:<BASE32(données + CRC16)>`, avec votre URL, votre tag et vos octets. Décodeur de référence pour le site : `ngpc_qr/tools/result_codec.py`.

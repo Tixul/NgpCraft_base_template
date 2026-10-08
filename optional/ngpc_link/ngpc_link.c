@@ -6,7 +6,9 @@
  *     0xA5 | type | seq | body[len(type)] | checksum
  *
  *   type 0x01 HELLO: body = { version, payload size, token hi, token lo,
- *                             flags (bit 0: "I already have a session") }
+ *                             flags (bit 0: "I already have a session"),
+ *                             echo hi, echo lo -- the last token we heard from
+ *                             the peer, 0 if none yet (see link_on_hello) }
  *   type 0x02 DATA : body = ngpc_link_out[NGPC_LINK_PAYLOAD]
  *   type 0x03 BYE  : empty body
  *   checksum = (type + seq + body) XOR 0x5A
@@ -26,12 +28,12 @@
 typedef char ngpc_link_payload_range_check[
     (NGPC_LINK_PAYLOAD >= 1 && NGPC_LINK_PAYLOAD <= 32) ? 1 : -1];
 
-/* Largest body to store: the payload, or the announcement (5 bytes) when the
+/* Largest body to store: the payload, or the announcement (7 bytes) when the
  * payload is smaller. */
-#if NGPC_LINK_PAYLOAD > 5
+#if NGPC_LINK_PAYLOAD > 7
 #define NGPC_LINK_BODY_MAX NGPC_LINK_PAYLOAD
 #else
-#define NGPC_LINK_BODY_MAX 5
+#define NGPC_LINK_BODY_MAX 7
 #endif
 
 #define LINK_MAGIC     0xA5u
@@ -41,7 +43,7 @@ typedef char ngpc_link_payload_range_check[
 #define LINK_TYPE_DATA  0x02u
 #define LINK_TYPE_BYE   0x03u
 
-#define LINK_HELLO_BODY 5u
+#define LINK_HELLO_BODY 7u
 #define LINK_HEADER     3u   /* magique + type + seq */
 #define LINK_FRAME_MAX  (LINK_HEADER + NGPC_LINK_BODY_MAX + 1u)
 
@@ -78,6 +80,7 @@ static u16 s_peer_token;   /* the peer's */
 static u8  s_tx_seq;
 static u8  s_roll;         /* token draws since init */
 static u16 s_search;       /* frames spent searching, feeds the announced token */
+static u8  s_search_frozen; /* stop the clock at first contact -- see link_on_hello */
 static u8  s_hello_burst;
 static u8  s_send_timer;
 static u8  s_hello_timer;
@@ -184,14 +187,56 @@ static u8 link_build_hello(u8 *dst)
     /* Say whether we already have a peer: without this, two established
      * consoles keep answering each other and waste half the wire. */
     body[4] = (u8)((ngpc_link_state == NGPC_LINK_READY) ? 1 : 0);
+    /* Echo the last token we heard. This is what tells the peer that we are
+     * looking at the same PAIR of numbers it is -- see link_on_hello. */
+    body[5] = (u8)(s_peer_token >> 8);
+    body[6] = (u8)(s_peer_token & 0x00FFu);
     return link_build(dst, LINK_TYPE_HELLO, body, LINK_HELLO_BODY);
 }
 
 /* ---- Receive ---- */
 
+/* ⛔ THE BUG THIS ENDS: "I quite often end up with both sides claiming to be the
+ * host (and sometimes both the client)."
+ *
+ * The old rule was `host = (link_token() > tok)`. It reads OUR token live -- the
+ * search counter is still running -- while `tok` is a SNAPSHOT the peer took when
+ * it built its HELLO, up to HELLO_INTERVAL + 2 frames earlier. So the two consoles
+ * never compared the same pair of numbers: each weighed its own present against
+ * the other's past. Write A's start as 0 and B's as delta, with d frames of
+ * announcement lag: A concludes `t > t - delta - d`, which is ALWAYS true, and B
+ * concludes `t - delta > t - d`, which is true as soon as `d > delta`. Two hosts,
+ * and both of them right from where they stood. With d around 10 frames, any two
+ * players who opened the link screen within ~170 ms of each other could hit it.
+ *
+ * Worse, the verdict LATCHED: once READY with an unchanged peer token nothing was
+ * recomputed, so the later exchange that would have agreed never ran. And the
+ * tie branch fired on consoles that were not tied at all -- a live counter sweeps
+ * PAST the peer's stale value on its way up, and each crossing threw away a
+ * perfectly good ordering and re-drew.
+ *
+ * 🔑 THE FIX IS NOT MORE ENTROPY IN THE TOKEN, IT IS COMPARING THE SAME PAIR.
+ * Two rules do it:
+ *
+ *   1. FREEZE the search counter at first contact. From then on our announced
+ *      token is a constant, so "what we announced" and "what we compare" cannot
+ *      drift apart.
+ *   2. Each HELLO ECHOES the last token heard from the peer, and we only decide
+ *      when the echo coming back IS our own frozen token. At that instant both
+ *      consoles are provably holding the same (mine, theirs), and `>` on the same
+ *      pair cannot disagree.
+ *
+ * ⚖️ WHAT THIS DOES NOT FIX, deliberately. The two freezes do not land at the same
+ * millisecond, so a start-time difference under one hello interval can still elect
+ * the console that opened the screen second. That is a fair trade: the roles are
+ * AGREED, which is what a session needs, and "who was first" was never resolvable
+ * to better than the announcement rate anyway. Both-host is a broken session; a
+ * role decided eight frames coarsely is a playable one. */
 static void link_on_hello(void)
 {
     u16 tok;
+    u16 echo;
+    u16 mine;
     u8 peer_ready;
 
     if (s_rx_body[0] != NGPC_LINK_PROTO || s_rx_body[1] != NGPC_LINK_PAYLOAD) {
@@ -206,31 +251,57 @@ static void link_on_hello(void)
 
     tok = (u16)(((u16)s_rx_body[2] << 8) | (u16)s_rx_body[3]);
     peer_ready = (u8)(s_rx_body[4] & 1u);
+    echo = (u16)(((u16)s_rx_body[5] << 8) | (u16)s_rx_body[6]);
 
-    if (tok == link_token()) {
-        /* Same search time AND same draw: nothing left to decide on. Draw a new
-         * low byte and re-announce. */
+    /* Rule 1: somebody is out there, so stop the clock. */
+    if (!s_search_frozen) {
+        s_search_frozen = 1;
+        s_hello_burst = LINK_HELLO_BURST;
+    }
+
+    if (ngpc_link_state == NGPC_LINK_READY) {
+        if (tok != s_peer_token) {
+            /* A different console, or the same one restarted. The verdict we
+             * hold was about somebody else: go and elect again rather than keep
+             * it. */
+            ngpc_link_stats.resyncs++;
+            s_peer_token = tok;
+            ngpc_link_state = NGPC_LINK_SEARCHING;
+            s_hello_burst = LINK_HELLO_BURST;
+        } else if (!peer_ready && s_hello_burst == 0) {
+            /* The peer greets us while the session is already running: it lost
+             * track of us, not the other way round. Answer at least once, or a
+             * console that went LOST could never come back -- it only sends
+             * announcements, we only send data, and neither restarts the other. */
+            s_hello_burst = 1;
+        }
+        return;
+    }
+
+    s_peer_token = tok;
+    mine = link_token();
+
+    /* Rule 2: decide only on a pair we know they are holding too. */
+    if (echo != mine) {
+        /* They have not heard our current token yet. Keep announcing -- now with
+         * THEIR token echoed back, which is what closes the loop. */
+        s_hello_burst = LINK_HELLO_BURST;
+        return;
+    }
+
+    if (tok == mine) {
+        /* A real tie this time, not an artefact of a moving counter: same frozen
+         * search time AND same draw. Nothing left to separate them, so re-draw
+         * the low nibble and go round again. */
         link_roll_token();
         s_hello_burst = LINK_HELLO_BURST;
         return;
     }
 
-    if (tok != s_peer_token || ngpc_link_state != NGPC_LINK_READY) {
-        if (ngpc_link_state == NGPC_LINK_READY) {
-            ngpc_link_stats.resyncs++;
-        }
-        s_peer_token = tok;
-        ngpc_link_host = (u8)((link_token() > tok) ? 1 : 0);
-        /* Answer, or the peer never learns we exist. */
-        s_hello_burst = LINK_HELLO_BURST;
-    } else if (!peer_ready && s_hello_burst == 0) {
-        /* The peer greets us while the session is already running: it lost
-         * track of us, not the other way round. Answer at least once, or a
-         * console that went LOST could never come back -- it only sends
-         * announcements, we only send data, and neither restarts the other. */
-        s_hello_burst = 1;
-    }
+    ngpc_link_host = (u8)((mine > tok) ? 1 : 0);
     ngpc_link_state = NGPC_LINK_READY;
+    /* Answer, so the peer reaches the same instant and the same conclusion. */
+    s_hello_burst = LINK_HELLO_BURST;
 }
 
 static void link_on_data(void)
@@ -370,7 +441,12 @@ static void link_send(void)
         }
     } else {
         s_hello_timer--;
-        if (s_hello_timer == 0) {
+        /* ⚡ A PENDING BURST ANNOUNCES EVERY FRAME, not once per interval. The
+         * rendezvous is now a round trip -- our token out, their echo back -- so
+         * at one hello per 8 frames the roles took ~16 frames to settle. Bursting
+         * closes it in about 4, and a burst is bounded (8 packets of 11 bytes)
+         * so it cannot run away with the wire budget. */
+        if (s_hello_timer == 0 || s_hello_burst) {
             s_hello_timer = NGPC_LINK_HELLO_INTERVAL;
             want_hello = 1;
         }
@@ -434,6 +510,7 @@ void ngpc_link_init(u16 seed)
     s_send_timer = 1;
     s_hello_timer = 1;
     s_search = 0;
+    s_search_frozen = 0;
     link_reset_parser();
 
 #if NGPC_LINK_RX_QUEUE > 0
@@ -464,8 +541,12 @@ void ngpc_link_update(void)
     link_drain();
 
     /* Time spent searching is the primary role criterion, so it only runs while
-     * we are actually looking for a peer. */
-    if (ngpc_link_state != NGPC_LINK_READY && s_search < 0xFF00u) {
+     * we are actually looking for a peer -- and it STOPS at first contact
+     * (s_search_frozen), because a criterion that keeps moving cannot be
+     * compared against a value the peer sent a few frames ago. See
+     * link_on_hello. */
+    if (!s_search_frozen && ngpc_link_state != NGPC_LINK_READY &&
+        s_search < 0xFF00u) {
         s_search++;
     }
 
@@ -506,6 +587,12 @@ void ngpc_link_set_role(u8 want_host)
      * ask for the same side they fall back to the random byte instead of
      * deadlocking. */
     s_search = want_host ? 0xFF00u : 0u;
+    /* A forced role is a FINAL value, so it is frozen like one: nothing must
+     * creep it back towards the middle afterwards. Two consoles that both force
+     * the same side land on the same search time and are separated by the random
+     * nibble instead of deadlocking -- and the echo handshake still runs, so they
+     * still agree on which of them got it. */
+    s_search_frozen = 1;
     s_token = (u16)(s_token + NGPC_COM_JOYPAD + 1u);
     s_hello_burst = LINK_HELLO_BURST;
     s_hello_timer = 1;
@@ -523,6 +610,7 @@ void ngpc_link_resync(void)
     ngpc_link_host = 0;
     ngpc_link_fresh = 0;
     s_peer_token = 0;
+    s_search_frozen = 0;      /* looking again, so the clock runs again */
     s_hello_burst = LINK_HELLO_BURST;
     s_hello_timer = 1;
     ngpc_link_stats.gap = 0;

@@ -1,5 +1,11 @@
 # Registres matériels NGPC — Référence complète
 
+> **Politique d'inactivité (2026-10-01) :** désactiver la demande BIOS après dix
+> minutes sans entrée : effacer le bit 6 de `User_Answer` / `HW_USR_ANSWER`
+> (0x6F86), en gardant le bit 5 réservé à zéro (`HW_USR_ANSWER &= (u8)0x9F;`).
+> Continuer à traiter tout `HW_USR_SHUTDOWN` (0x6F85) non nul, notamment batterie
+> faible et POWER. C'est une précaution provisoire, pas un défaut matériel prouvé.
+
 Source : ngpcspec.txt (NeeGee, 2000) + datasheet TLCS-900/H.
 Toutes les valeurs sont tirées de `ngpc_hw.h` dans ce template.
 
@@ -61,7 +67,7 @@ HW_TRUN   |= 0x01;        /* démarrer timer 0 */
 | `HW_JOYPAD` | `0x6F82` | u8 | État joypad (bits = boutons) |
 | `HW_USR_BOOT` | `0x6F84` | u8 | Raison du boot (0=normal, 1=resume, 2=alarme) |
 | `HW_USR_SHUTDOWN` | `0x6F85` | u8 | Flag arrêt demandé par l'OS |
-| `HW_USR_ANSWER` | `0x6F86` | u8 | Réponse user — bit5 doit être 0 |
+| `HW_USR_ANSWER` | `0x6F86` | u8 | User response: bit 5 reserved = 0; bit 6 inactivity request = 0 by default; preserve bit 7 |
 | `HW_LANGUAGE` | `0x6F87` | u8 | Langue système |
 | `HW_OS_VERSION` | `0x6F91` | u8 | 0=monochrome NGP, !=0=couleur NGPC |
 
@@ -74,7 +80,7 @@ PAD_RIGHT  = 0x08
 PAD_A      = 0x10
 PAD_B      = 0x20
 PAD_OPTION = 0x40
-PAD_POWER  = 0x80
+PAD_POWER  = 0x80   (no button on an NGPC; NOT the power switch - see HW_USR_SHUTDOWN)
 ```
 
 ---
