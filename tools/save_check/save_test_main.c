@@ -7,7 +7,7 @@
 #include "ngpc_timing.h"
 #include "ngpc_flash.h"
 
-volatile u8  g_cmd;          /* 1 save, 2 init+load, 3 erase */
+volatile u8  g_cmd;          /* 1 save, 2 init+load, 3 erase, 4 bad magic, 5 legacy */
 volatile u8  g_done;         /* incremented after each command */
 volatile u16 g_res;
 volatile u32 g_arg;          /* payload seed for a save */
@@ -49,6 +49,9 @@ void main(void)
             report();
         } else if (c == 3u) {
             g_res = ngpc_flash_erase();
+        } else if (c == 5u) {
+            for (i = 0u; i < (u16)SAVE_SIZE; i++) g_load[i] = 0u;
+            g_res = ngpc_flash_load_legacy(g_load);
         } else if (c == 4u) {
             /* bad magic must be refused */
             g_buf[0] = 0x00u;

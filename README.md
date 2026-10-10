@@ -635,7 +635,8 @@ if (dirty && ngpc_flash_save(&s)) dirty = 0u;        /* when leaving a screen */
 Status (2026-10-08): `tools/save_check/save_check.py` (emulator, 256 and 512 bytes) — 163 saves /
 5 bank switches, reboots, 8 cut points, 8 corruptions, dirty inactive bank, sequence wrap,
 4/8/16 Mbit, refusals, 0 `flash-busy-fetch`; negative control without `di` loses the ROM.
-**Not validated on hardware.** Records of the pre-2026-10 append-only driver are not read.
+**Not validated on hardware.** A shipped game recovers saves of the pre-2026-10 append-only
+driver with `ngpc_flash_load_legacy()` (validate them with your own checksum).
 Details: [docs/NGPC_FLASH_SAVE_GUIDE.md](docs/NGPC_FLASH_SAVE_GUIDE.md).
 
 ### ngpc_bitmap -- Bitmap mode

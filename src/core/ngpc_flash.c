@@ -66,6 +66,7 @@ u8   ngpc_flash_ready(void)                { return 0u; }
 u8   ngpc_flash_cart_size(void)            { return 0u; }
 u8   ngpc_flash_exists(void)               { return 0u; }
 void ngpc_flash_load(void *data)           { (void)data; }
+u8   ngpc_flash_load_legacy(void *data)    { (void)data; return 0u; }
 u8   ngpc_flash_save(void *data)           { (void)data; return 0u; }
 u16  ngpc_flash_verify(const void *data)   { (void)data; return 0xFFFFu; }
 u8   ngpc_flash_slots_used(void)           { return 0u; }
@@ -195,6 +196,28 @@ void ngpc_flash_load(void *data)
     if (s_current == NONE) return;
     p = slot_ptr(s_current);
     for (i = 0u; i < (u16)SAVE_SIZE; i++) dst[i] = p[i];
+}
+
+/* The old driver wrote bank A only, slot after slot, newest = highest index
+ * carrying the magic. Its records have no journal trailer. */
+u8 ngpc_flash_load_legacy(void *data)
+{
+    u8 *dst = (u8 *)data;
+    volatile u8 NGP_FAR *p;
+    u8 slot;
+    u16 i;
+    if (!s_offset) return 0u;
+    slot = SLOTS;
+    while (slot-- > 0u) {
+        p = slot_ptr(slot);
+        if (p[0] != 0xCAu || p[1] != 0xFEu || p[2] != 0x20u || p[3] != 0x26u)
+            continue;
+        if (slot_looks_valid(slot) && slot_crc_ok(slot))
+            continue;                    /* a journal record, not a legacy one */
+        for (i = 0u; i < (u16)SAVE_SIZE; i++) dst[i] = p[i];
+        return 1u;
+    }
+    return 0u;
 }
 
 u16 ngpc_flash_verify(const void *data)

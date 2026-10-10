@@ -71,7 +71,8 @@
  *   if (dirty && ngpc_flash_save(&save)) dirty = 0;
  *
  * Build with NGP_ENABLE_FLASH_SAVE=1 (links ngpc_flash_asm.rel).
- * Records written by the pre-2026-10 append-only driver are NOT read.
+ * Records written by the pre-2026-10 append-only driver are not "current";
+ * a shipped game recovers them with ngpc_flash_load_legacy() (see below).
  *
  * NGP_FAR: flash is above 0x200000; the driver uses far pointers internally,
  * your buffers are ordinary RAM pointers.
@@ -109,6 +110,19 @@ u8 ngpc_flash_exists(void);
 
 /* Copy the current record (SAVE_SIZE bytes, journal included) into data. */
 void ngpc_flash_load(void *data);
+
+/* MIGRATION from the pre-2026-10 append-only driver (block 33, no journal).
+ * Copies into data the newest old-format record of bank A (magic CA FE 20 26,
+ * not a journal record) and returns 1; 0 if there is none. Only meaningful
+ * when ngpc_flash_exists() is 0. The old format has NO integrity check of its
+ * own: validate the copy with YOUR checksum before using it. The old slots are
+ * never erased while no journal record exists, and the next save goes after
+ * them. Typical use:
+ *     if (ngpc_flash_exists()) ngpc_flash_load(&s);
+ *     else if (!ngpc_flash_load_legacy(&s) || !my_save_valid(&s)) defaults();
+ * Keep your checksum away from the last NGPC_FLASH_TRAILER bytes (the
+ * journal); old records had them in the padding. */
+u8 ngpc_flash_load_legacy(void *data);
 
 /* Write a new record. data must be SAVE_SIZE bytes in RAM and start with the
  * magic; its last NGPC_FLASH_TRAILER bytes are overwritten by the journal.

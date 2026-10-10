@@ -245,7 +245,10 @@ Its defects, each found on a real console by OVER REV: no `di`; a hard-coded
 16 Mbit address; "empty slot" decided on one byte; the only copy of the save
 erased before the new one was written; no integrity check. The OVER REV v31
 journal fixed them; this driver is its game-independent version.
-Records written by the old driver are not read.
+Records written by the old driver are recovered with `ngpc_flash_load_legacy()`
+(newest old slot of bank A, copied as is: validate it with the game's own
+checksum). The old slots stay untouched until a journal record exists; keep
+your checksum away from the last 8 bytes, which old records left as padding.
 
 ---
 

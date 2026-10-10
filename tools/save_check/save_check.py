@@ -238,6 +238,34 @@ def suite(rom, syms, n):
     check(r.flash() == before, "flash changed while refused")
     print("  PASS bad magic refused; unknown cart size refuses save and erase, flash untouched")
 
+    # -- migration from the old append-only driver -----------------------------
+    def old_record(seed):           # pre-2026-10 layout: magic + data, zero padding
+        d = bytearray(n)
+        d[:4] = MAGIC
+        d[4], d[5] = seed & 255, seed >> 8 & 255
+        for j in range(6, 80):
+            d[j] = (seed + j) & 255
+        return bytes(d)
+    for count in (5, per_bank):     # bank A partly / completely filled by the old driver
+        img = bytearray(rom + b"\xFF" * (0x200000 - len(rom)))
+        for s in range(count):
+            img[BANK_A[3] + s * n:BANK_A[3] + (s + 1) * n] = old_record(300 + s)
+        old_a = bytes(img[BANK_A[3]:BANK_A[3] + 0x2000])
+        b = Rig(rom, syms, 0x200000, n, flash=bytes(img))
+        check(b.info()[2] == 0, "legacy record taken as journal")
+        check(b.cmd(5) == 1 and b.loaded_seed() == 300 + count - 1, ("legacy load", count, b.loaded_seed()))
+        check(b.cmd(1, 900) == 1, ("save after legacy", count))
+        rec = max(records(b.flash(), 3, n))
+        where = BANK_A[3] + count * n if count < per_bank else BANK_A[3] - 0x2000
+        check(rec[1] == where, ("journal slot after legacy", count, hex(rec[1])))
+        check(b.flash()[BANK_A[3]:BANK_A[3] + count * n] == old_a[:count * n], "legacy slots touched")
+        c = Rig(rom, syms, 0x200000, n, flash=b.flash())
+        check(c.info()[2] == 1 and c.loaded_seed() == 900, ("reboot after migration", count))
+    blank = Rig(rom, syms, 0x200000, n)
+    check(blank.cmd(5) == 0, "legacy found on a blank cart")
+    print("  PASS migration: newest old record recovered, kept intact, first save goes after it "
+          "(or to bank B when A is full)")
+
     # -- explicit erase --------------------------------------------------------
     r = Rig(rom, syms, 0x200000, n)
     for i in range(1, 4):
