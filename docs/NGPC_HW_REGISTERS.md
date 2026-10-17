@@ -183,7 +183,9 @@ Lors du passage d'une coordonnée monde s16 : `(u8)(cam_x & 0xFF)`.
 
 **Format couleur :**
 ```c
-#define RGB(r, g, b)  ((u16)((r)&0xF) | (((g)&0xF)<<4) | (((b)&0xF)<<8))
+/* Chaque terme est élargi AVANT d'être décalé : sans ces casts, cc900 calcule
+ * sur 8 bits et le bleu disparaît (voir src/core/ngpc_hw.h). */
+#define RGB(r, g, b)  ((u16)(((u16)((r) & 0xFu))       \n                           | ((u16)((g) & 0xFu) << 4)  \n                           | ((u16)((b) & 0xFu) << 8)))
 /* 0x0BGR : bits 11-8=B, 7-4=G, 3-0=R */
 
 /* Lire/écrire une entrée de palette */
