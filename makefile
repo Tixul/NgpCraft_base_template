@@ -27,11 +27,15 @@ export THOME
 # The null device depends on the SHELL make runs, not on the OS: with Git for
 # Windows on the PATH this make uses Git's sh.exe even from cmd, and `>nul`
 # then creates a real file named "nul" in the project (hard to delete).
+# build.bat passes PYTHON itself: skip the detection then (under cmd with Git
+# installed it prints "path not found" and picks a python that cannot start).
+ifeq ($(origin PYTHON),undefined)
 ifeq ($(OS),Windows_NT)
     NULDEV := $(if $(findstring sh.exe,$(SHELL)),/dev/null,nul)
     PYTHON := $(shell (where py >$(NULDEV) 2>$(NULDEV) && echo py -3) || (where python3 >$(NULDEV) 2>$(NULDEV) && echo python3) || echo python)
 else
     PYTHON := $(shell command -v python3 2>/dev/null && echo python3 || echo python)
+endif
 endif
 CC900_CPU ?= -Nb2
 

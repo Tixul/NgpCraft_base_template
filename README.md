@@ -279,8 +279,8 @@ Optional:
 1. Edit `build.bat`: set `compilerPath` to your Toshiba toolchain folder
 2. Optional: set `emuPath` if you want auto-launch after build
 3. Optional: place `system.lib` at the project root only if you want the legacy system.lib flash path
-4. Run `build.bat`
-5. Output: `bin/main.ngc`
+4. Run `build.bat` (double-click it, or type `build.bat` in a terminal opened in the project folder)
+5. Output: `bin/main.ngc`. The script ends with **BUILD OK** or **BUILD FAILED**; on failure, read the first error above it. After a double-click the window waits for a key, so the messages stay readable (`build.bat nopause` skips that wait).
 
 Minimal Windows checklist:
 - required: valid `compilerPath`

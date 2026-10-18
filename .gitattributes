@@ -3,3 +3,7 @@
 
 # ASM900 assembler requires CRLF line endings — always keep CRLF
 *.asm text eol=crlf
+
+# cmd.exe can mis-jump "goto" labels in LF-only batch files — keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
