@@ -11,7 +11,8 @@
  * Usage type :
  *   1. Déclarer un pool : NgpcPushBlock blocks[SCENE_PUSH_BLOCK_COUNT];
  *   2. Init depuis l'export éditeur :
- *        for (u8 i = 0; i < SCENE_PUSH_BLOCK_COUNT; i++)
+ *        u8 i;   (cc900 : déclarée en tête de bloc, pas dans le for)
+ *        for (i = 0; i < SCENE_PUSH_BLOCK_COUNT; i++)
  *            ngpc_pushblock_init(&blocks[i],
  *                scene_push_block_tiles[i].tx,
  *                scene_push_block_tiles[i].ty);

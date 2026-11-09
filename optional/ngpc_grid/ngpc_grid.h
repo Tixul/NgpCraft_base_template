@@ -44,7 +44,7 @@
  *   for (y = 0; y < GRID_H; y++) {
  *       for (x = 0; x < GRID_W; x++) {
  *           u8 sx, sy;
- *           ngpc_grid_to_screen(&grid, x, y, 8, 8, &sx, &sy);
+ *           ngpc_grid_to_screen(&grid, x, y, 0, 0, 8, 8, &sx, &sy);
  *           ngpc_sprite_set(SPR_GRID + y * GRID_W + x, sx, sy,
  *                           tile_for_cell[ngpc_grid_get(&grid, x, y)], 0, 0);
  *       }
@@ -57,7 +57,7 @@
 
 #include "ngpc_hw.h"
 
-/* ── Struct (4 octets) ───────────────────────────────────── */
+/* ── Struct (8 octets : pointeur 4 + w, h, pad + 1 d'alignement) ── */
 typedef struct {
     u8 *cells;  /* flat array [ty * w + tx] = valeur de la cellule */
     u8  w;      /* largeur en cellules */
@@ -77,10 +77,11 @@ static void ngpc_grid_init(NgpcGrid *g, u8 *cells, u8 w, u8 h) {
 
 /* Remplit toutes les cellules avec une valeur. */
 static void ngpc_grid_fill(NgpcGrid *g, u8 value) {
-    u8 i;
+    /* corrigé campagne 2026-11-08 : compteur u16 (avant : u8 et (u8)n ->
+     * une grille 16x16 = 256 cellules n'était pas remplie du tout). */
+    u16 i;
     u16 n = (u16)g->w * g->h;
-    for (i = 0; i < (u8)n; i++) g->cells[i] = value;
-    /* Note : si w*h > 255, boucler sur u16. Grilles jusqu'à 16×16 (256 cellules) OK. */
+    for (i = 0; i < n; i++) g->cells[i] = value;
 }
 
 /* ── Accès cellules ───────────────────────────────────────── */
@@ -193,9 +194,11 @@ static u8 ngpc_grid_find(const NgpcGrid *g, u8 value, u8 *tx, u8 *ty) {
     return 0;
 }
 
-/* Nombre de cellules d'une valeur donnée dans toute la grille. */
-static u8 ngpc_grid_count(const NgpcGrid *g, u8 value) {
-    u8 x, y, n = 0;
+/* Nombre de cellules d'une valeur donnée dans toute la grille.
+ * corrigé campagne 2026-11-08 : retour u16 (256 cellules identiques -> 0 en u8). */
+static u16 ngpc_grid_count(const NgpcGrid *g, u8 value) {
+    u8 x, y;
+    u16 n = 0;
     for (y = 0; y < g->h; y++)
         for (x = 0; x < g->w; x++)
             if (ngpc_grid_get(g, x, y) == value) n++;

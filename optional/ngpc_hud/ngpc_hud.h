@@ -21,7 +21,7 @@
  * ×2 par rapport à la largeur visuelle.
  *
  * Exemple — barre HP 8 points sur 4 tiles :
- *   #define TILE_HP_FULL  256   /* tile chargé en RAM */
+ *   #define TILE_HP_FULL  256   // tile chargé en RAM (corrigé campagne 2026-11-08 : plus de commentaire imbriqué)
  *   #define TILE_HP_HALF  257
  *   #define TILE_HP_EMPTY 258
  *
@@ -35,12 +35,13 @@
  *
  * Score
  * -----
- *   ngpc_hud_score_draw(GFX_SCR1, 0, 12, 1, score, 6);  // "  1234" sur 6 chars
+ *   ngpc_hud_score_draw(GFX_SCR1, 0, 12, 1, score, 6, 0);  // "  1234" sur 6 chars
+ *   ngpc_hud_score_draw(GFX_SCR1, 0, 12, 1, score, 6, 1);  // "001234"
  *
  * Vies — icônes sprites
  * ----------------------
- *   ngpc_hud_lives_draw(SPR_LIVES, 2, 1, lives, LIFE_TILE, 0, 12);
- *   // 3 vies → 3 sprites espacés de 12 px depuis (2, 1)
+ *   ngpc_hud_lives_draw(SPR_LIVES, 2, 1, lives, 5, LIFE_TILE, 0, 12);  // 5 emplacements
+ *   // 3 vies → 3 sprites (priorité SPR_FRONT) espacés de 12 px depuis (2, 1), 2 cachés
  */
 
 #include "ngpc_hw.h"
@@ -90,7 +91,8 @@ void ngpc_hud_bar_set(NgpcHudBar *bar, u8 value);
  *   plane, pal     : plane et palette
  *   tx, ty         : position tile
  *   score          : valeur 0-65535
- *   digits         : nombre de caractères (ex: 6 → " 1234" zéro-paddé à gauche)
+ *   digits         : nombre de caractères (1..20 ; la valeur u16 tient sur 5 chiffres,
+ *                    les colonnes en plus à gauche sont des '0' ou des espaces)
  *   zero_pad       : 1 = zéros à gauche ("001234"), 0 = espaces ("  1234")
  */
 void ngpc_hud_score_draw(u8 plane, u8 pal, u8 tx, u8 ty,

@@ -56,6 +56,8 @@ Les transitions se font via des **portes** (N/S/W/E) dessinées sur les bords de
 4. [generate_ex] Injection de boucles :
    → paires adjacentes non-connectées, chacune a loop_pct% de connexion
    → re-assignation templates (les exits ont changé)
+   → la sortie (EXIT) est recalculée : salle la plus lointaine du donjon FINAL
+     (depuis le 2026-11-08 ; les donjons d'une graine avec boucles ont changé)
 ```
 
 **Effet du `loop_pct` :**
@@ -114,7 +116,7 @@ Règles appliquées automatiquement :
 | Room type | enemies | items | count | special |
 |---|---|---|---|---|
 | START | 0 | 0 | 0 | 0 |
-| NORMAL | aléatoire | aléatoire | 1..max | 0 |
+| NORMAL | aléatoire | aléatoire | 1..max (0 si `PROCGEN_FLAG_CLEARED`) | 0 |
 | EXIT | 0xFF | 0 | max | **1** (boss) |
 | SHOP | 0 | 0xFF | 0 | **2** (shop) |
 | SECRET | 1 type | 0xFF | 1 | **3** (secret) |
@@ -125,7 +127,7 @@ Règles appliquées automatiquement :
 /* Index du voisin (0xFF = PROCGEN_IDX_NONE si pas de porte ou hors grille) */
 u8 ngpc_procgen_neighbor(const ProcgenMap *map, u8 room_idx, u8 dir);
 
-/* Position tile du joueur selon la porte d'entrée */
+/* Position tile du joueur selon la porte d'ENTRÉE (côté d'arrivée = opposé du sens de marche) */
 void ngpc_procgen_spawn_pos(u8 entry_dir, u8 *out_x, u8 *out_y);
 
 /* Charger une room (marque VISITED, déclenche le callback de rendu) */
@@ -276,9 +278,11 @@ void level_update(void)
     if (dir != 0xFFu) {
         next = ngpc_procgen_neighbor(&g_dungeon, cur, dir);
         if (next != PROCGEN_IDX_NONE) {
+            /* entry_dir = côté par lequel on ARRIVE = opposé du sens de marche
+             * (dir ^ 1 : N<->S, W<->E) -- corrigé campagne 2026-11-08 */
             ngpc_procgen_load_room(&g_dungeon, next,
-                                   g_procgen_rooms, room_load_cb, dir, 0);
-            ngpc_procgen_spawn_pos(dir, &g_px, &g_py);
+                                   g_procgen_rooms, room_load_cb, (u8)(dir ^ 1u), 0);
+            ngpc_procgen_spawn_pos((u8)(dir ^ 1u), &g_px, &g_py);
         }
     }
 }

@@ -102,7 +102,7 @@ typedef struct {
     u8  plane;
     u8  bx, by;
     u8  bw, bh;
-    u8  char_idx;
+    u16 char_idx;  /* corrigé campagne 2026-11-08 : u8 bouclait 255->0, texte >= 256 car. + A = boucle infinie */
     u8  tick;
     u8  blink;
     u8  cursor;
@@ -119,7 +119,8 @@ void ngpc_dialog_open(NgpcDialog *d,
 void ngpc_dialog_close(NgpcDialog *d);
 
 /*
- * Sets the dialogue text.
+ * Sets the dialogue text (any length ; no paging: what does not fit in the box
+ * is not shown, split long texts into several set_text calls).
  *
  * Plain text:
  *   "Hello world"

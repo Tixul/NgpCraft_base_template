@@ -92,12 +92,21 @@ void ngpc_cluster_gen(NgpcCluster *cl, u16 cluster_seed)
     for (i = 1u; i < n; i++) {
         /* Chercher un parent ayant de la place, de preference le noeud le plus
            recent qui n'est pas encore plein. */
+        /* corrigé campagne 2026-11-08 : "le dernier noeud ayant de la place" donnait
+         * toujours i-1 -> une chaine, jamais l'arbre ramifie de la doc. On tire le
+         * parent au hasard (graine du cluster) parmi les noeuds 0..i-1 non pleins. */
         parent = 0u;
         {
-            u8 j;
+            u8 j, nc, k;
+            nc = 0u;
+            for (j = 0u; j < i; j++) {
+                if (cl->n_children[j] < 3u) nc++;
+            }
+            k = (nc > 0u) ? (u8)(_cl_rng_u8() % nc) : 0u;
             for (j = 0u; j < i; j++) {
                 if (cl->n_children[j] < 3u) {
-                    parent = j;
+                    if (k == 0u) { parent = j; break; }
+                    k--;
                 }
             }
         }
@@ -151,7 +160,22 @@ void ngpc_cluster_enter(NgpcCluster *cl, u8 room_idx, u16 base_seed)
     /* Style : nombre d'exits muraux = n_children + (1 si back, sauf Entry) */
     /* On derive le style automatiquement (0xFF) et laisse dungeongen choisir. */
     /* Le game code peut forcer un style particulier si besoin. */
-    ngpc_dungeongen_enter((u16)rseed, 0xFFu);
+    /* corrigé campagne 2026-11-08 : le style auto pouvait avoir moins de sorties murales
+     * que de liens (enfants + parent), voire 0 (salle fermee). On part du style auto et
+     * on avance jusqu'a un style qui a assez de sorties (deterministe). */
+    {
+        u8 need, sty, k, e, n;
+        need = (u8)(cl->n_children[room_idx] + ((cl->parent_idx[room_idx] != 0xFFu) ? 1u : 0u));
+        sty  = ngpc_dungeongen_auto_style((u16)rseed);
+        for (k = 0u; k < ngpc_dungeongen_n_styles(); k++) {
+            e = ngpc_dungeongen_style_exits(sty);
+            n = 0u;
+            while (e) { n = (u8)(n + (e & 1u)); e >>= 1; }
+            if (n >= need) break;
+            sty = (u8)((u8)(sty + 1u) % ngpc_dungeongen_n_styles());
+        }
+        ngpc_dungeongen_enter((u16)rseed, sty);
+    }
     ngpc_dungeongen_set_room_type(rtype, avec_esc);
 }
 
@@ -164,16 +188,19 @@ void ngpc_cluster_go_forward(NgpcCluster *cl, u8 exit_child_idx, u16 base_seed)
     u8 child;
 
     cur = cl->current_room;
-    if (exit_child_idx >= cl->n_children[cur]) { return; }
 
-    child = cl->children[cur][exit_child_idx];
-    if (child == 0xFFu || child >= cl->n_rooms)  { return; }
-
-    /* Verifier escalier AVANT de changer de room */
+    /* Verifier escalier AVANT de changer de room.
+     * corrigé campagne 2026-11-08 : ce test venait apres la borne n_children ; la salle
+     * de l'escalier etant une feuille (0 enfant), took_stair ne passait jamais a 1. */
     if (cur == cl->stair_room && ngpc_dgroom.has_stair) {
         cl->took_stair = 1u;
         return;   /* le game code doit generer un nouveau cluster */
     }
+
+    if (exit_child_idx >= cl->n_children[cur]) { return; }
+
+    child = cl->children[cur][exit_child_idx];
+    if (child == 0xFFu || child >= cl->n_rooms)  { return; }
 
     ngpc_cluster_enter(cl, child, base_seed);
 }

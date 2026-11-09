@@ -11,9 +11,12 @@
  * Utilisation principale : IA ennemis (se diriger vers le joueur).
  *
  * Coût RAM (buffers statiques internes) :
- *   - dist[16×16] = 256 octets    (table de distances)
- *   - queue[64]   = 64 octets     (file BFS, 4 bits x + 4 bits y par case)
- * Total : ~320 octets utilisés pendant l'appel uniquement (variables locales ou static).
+ *   - dist[16×16] = 256 octets    (partagé par step / dist / build)
+ *   - queue[256]  = 256 octets    (file BFS, 4 bits x + 4 bits y par case)
+ * Total : 512 octets statiques (corrigé campagne 2026-11-08 : file 256, plus de limite à 63 pas)
+ * + 66 octets par NgpcPath si l'API build/next est utilisée.
+ * Coût : un BFS complet par appel (~quelques images CPU sur 15×15) -> ne pas appeler
+ * chaque image pour chaque ennemi : recalculer quand la case de la cible change.
  *
  * Contrainte : grille max 16×16 (tx, ty ∈ [0..15]).
  *
@@ -82,5 +85,47 @@ u8 ngpc_path_step(const u8 *map, u8 map_w, u8 map_h,
  */
 u8 ngpc_path_dist(const u8 *map, u8 map_w, u8 map_h,
                   u8 sx, u8 sy, u8 tx, u8 ty);
+
+/* ── Calculer une fois, suivre pas à pas (ajout campagne 2026-11-08) ──────
+ * Un seul BFS par chemin au lieu d'un par image : appeler ngpc_path_build()
+ * quand la cible change de case (ou toutes les N images), puis consommer
+ * un pas par déplacement avec ngpc_path_next().
+ *
+ * RAM : 66 octets par NgpcPath (2 bits par pas, 255 pas max = toute grille 16×16).
+ *
+ *   static NgpcPath ep;
+ *   if (player_changed_tile)
+ *       ngpc_path_build(&ep, col_map, MAP_W, MAP_H, etx, ety, ptx, pty);
+ *   if (enemy_ready_to_move && ngpc_path_next(&ep, &dx, &dy)) { etx += dx; ety += dy; }
+ *
+ * NB : le chemin est figé au moment du build ; si la carte change (porte, bloc
+ * poussé), refaire un build.
+ */
+typedef struct {
+    u8 steps[64];  /* 2 bits par pas : 0=haut 1=bas 2=gauche 3=droite */
+    u8 len;        /* nombre total de pas */
+    u8 pos;        /* prochain pas à consommer */
+} NgpcPath;
+
+/*
+ * Calcule le chemin le plus court de (sx,sy) vers (tx,ty) et le mémorise dans *p.
+ * Retourne sa longueur (= ngpc_path_dist), 0 si source == cible,
+ * PATH_NO_PATH si inaccessible (p->len = 0 dans ces deux derniers cas).
+ * Partage les buffers statiques de ngpc_path_step/dist (non réentrant).
+ */
+u8 ngpc_path_build(NgpcPath *p, const u8 *map, u8 map_w, u8 map_h,
+                   u8 sx, u8 sy, u8 tx, u8 ty);
+
+/*
+ * Donne le pas suivant (*dx, *dy ∈ {-1,0,+1}, un seul axe) et avance.
+ * Retourne 1, ou 0 (dx = dy = 0) quand le chemin est entièrement parcouru.
+ */
+u8 ngpc_path_next(NgpcPath *p, s8 *out_dx, s8 *out_dy);
+
+/* Pas restants à parcourir. */
+#define ngpc_path_remaining(p)  ((u8)((p)->len - (p)->pos))
+
+/* Repartir du début du même chemin (source d'origine). */
+#define ngpc_path_rewind(p)     ((p)->pos = 0)
 
 #endif /* NGPC_PATH_H */

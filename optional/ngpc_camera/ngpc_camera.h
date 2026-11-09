@@ -43,7 +43,9 @@ void ngpc_cam_init(NgpcCamera *cam, s16 level_w, s16 level_h, u8 flags);
 /* Centre la caméra instantanément sur (tx, ty) monde. */
 void ngpc_cam_follow(NgpcCamera *cam, s16 tx, s16 ty);
 
-/* Suivi progressif (lerp). speed : 1 = lent, 8 = rapide.
+/* Suivi progressif (lerp). speed = diviseur de l'écart par frame :
+ * 1 = immédiat, 4 = moyen, 8 = très progressif (0 traité comme 1).
+ * (doc corrigée campagne 2026-11-08 : disait « 1 = lent, 8 = rapide ».)
  * Appeler chaque frame avant ngpc_cam_apply(). */
 void ngpc_cam_follow_smooth(NgpcCamera *cam, s16 tx, s16 ty, u8 speed);
 

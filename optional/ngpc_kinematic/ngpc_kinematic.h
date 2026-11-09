@@ -68,7 +68,7 @@
 #define KIN_ON_CEIL    0x02
 #define KIN_ON_WALL    0x04
 
-/* ── Struct (11 octets) ──────────────────────────────────── */
+/* ── Struct (14 octets : 13 de champs + 1 d'alignement) ──── */
 typedef struct {
     FxVec2 pos;      /* position fx16 (pixel.sous-pixel)         — 4 octets */
     FxVec2 vel;      /* vélocité fx16 (px/frame)                 — 4 octets */

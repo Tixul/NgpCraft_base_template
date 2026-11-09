@@ -51,7 +51,11 @@
 
 /* ── Pool size ───────────────────────────────────────────── */
 #ifndef BULLET_POOL_SIZE
-#define BULLET_POOL_SIZE  16
+#define BULLET_POOL_SIZE  16   /* à régler par -D dans le makefile ; max 16 (masque u16 de ngpc_pool) */
+#endif
+/* corrigé campagne 2026-11-08 : > 16 donnait un comportement indéfini (1u << 16) */
+#if BULLET_POOL_SIZE < 1 || BULLET_POOL_SIZE > POOL_MAX
+#error "BULLET_POOL_SIZE doit valoir 1..16 (ngpc_pool : masque u16)"
 #endif
 
 /* ── Flags ───────────────────────────────────────────────── */

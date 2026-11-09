@@ -13,8 +13,8 @@ u8 ngpc_tilecol_type(const NgpcTileCol *col, s16 tx, s16 ty)
 
 u8 ngpc_tilecol_type_at(const NgpcTileCol *col, s16 wx, s16 wy)
 {
-    if (wx < 0 || wy < 0) return TILE_SOLID;
-    return ngpc_tilecol_type(col, wx / NGPC_TILE_SIZE, wy / NGPC_TILE_SIZE);
+    /* corrigé campagne 2026-11-08 : >> 3 = division par défaut (aussi < 0) */
+    return ngpc_tilecol_type(col, (s16)(wx >> 3), (s16)(wy >> 3));
 }
 
 u8 ngpc_tilecol_is_solid(const NgpcTileCol *col, s16 tx, s16 ty)
@@ -29,19 +29,18 @@ u8 ngpc_tilecol_is_solid(const NgpcTileCol *col, s16 tx, s16 ty)
 u8 ngpc_tilecol_rect_solid(const NgpcTileCol *col,
                             s16 wx, s16 wy, u8 rw, u8 rh)
 {
-    s16 tx0 = wx / NGPC_TILE_SIZE;
-    s16 ty0 = wy / NGPC_TILE_SIZE;
-    s16 tx1 = (wx + (s16)rw - 1) / NGPC_TILE_SIZE;
-    s16 ty1 = (wy + (s16)rh - 1) / NGPC_TILE_SIZE;
+    /* corrigé campagne 2026-11-08 : division par défaut (>> 3) et plus de bornage :
+     * hors de la map = TILE_SOLID (convention de ngpc_tilecol_type), sur les 4 bords.
+     * Avant : wx/8 arrondi vers 0 + bornes ramenées dans la map -> bords passables. */
+    s16 tx0 = (s16)(wx >> 3);
+    s16 ty0 = (s16)(wy >> 3);
+    s16 tx1 = (s16)((s16)(wx + (s16)rw - 1) >> 3);
+    s16 ty1 = (s16)((s16)(wy + (s16)rh - 1) >> 3);
     s16 tx, ty;
 
-    if (tx0 < 0) tx0 = 0;
-    if (ty0 < 0) ty0 = 0;
 
     for (ty = ty0; ty <= ty1; ty++) {
-        if (ty >= (s16)col->map_h) break;
         for (tx = tx0; tx <= tx1; tx++) {
-            if (tx >= (s16)col->map_w) break;
             if (ngpc_tilecol_type(col, tx, ty) == TILE_SOLID)
                 return 1;
         }
@@ -53,19 +52,18 @@ u8 ngpc_tilecol_rect_ground(const NgpcTileCol *col,
                              s16 wx, s16 wy, u8 rw, u8 rh,
                              s16 prev_bottom)
 {
-    s16 tx0 = wx / NGPC_TILE_SIZE;
-    s16 ty0 = wy / NGPC_TILE_SIZE;
-    s16 tx1 = (wx + (s16)rw - 1) / NGPC_TILE_SIZE;
-    s16 ty1 = (wy + (s16)rh - 1) / NGPC_TILE_SIZE;
+    /* corrigé campagne 2026-11-08 : division par défaut (>> 3) et plus de bornage :
+     * hors de la map = TILE_SOLID (convention de ngpc_tilecol_type), sur les 4 bords.
+     * Avant : wx/8 arrondi vers 0 + bornes ramenées dans la map -> bords passables. */
+    s16 tx0 = (s16)(wx >> 3);
+    s16 ty0 = (s16)(wy >> 3);
+    s16 tx1 = (s16)((s16)(wx + (s16)rw - 1) >> 3);
+    s16 ty1 = (s16)((s16)(wy + (s16)rh - 1) >> 3);
     s16 tx, ty;
 
-    if (tx0 < 0) tx0 = 0;
-    if (ty0 < 0) ty0 = 0;
 
     for (ty = ty0; ty <= ty1; ty++) {
-        if (ty >= (s16)col->map_h) break;
         for (tx = tx0; tx <= tx1; tx++) {
-            if (tx >= (s16)col->map_w) break;
             {
                 u8 t = ngpc_tilecol_type(col, tx, ty);
                 if (t == TILE_SOLID) return 1;
@@ -126,34 +124,38 @@ s16 ngpc_tilecol_ground_dist(const NgpcTileCol *col,
 }
 
 /* ══════════════════════════════════════════════════════
- * HELPER INTERNE : type le plus restrictif dans une zone
- * ══════════════════════════════════════════════════════ */
+ * HELPER INTERNE : tiles passifs présents dans une zone
+ * ══════════════════════════════════════════════════════
+ * corrigé campagne 2026-11-08 : renvoie un MASQUE (ZONE_DAMAGE | ZONE_LADDER)
+ * au lieu du type de plus grande valeur (DAMAGE + LADDER -> in_damage perdu,
+ * type projet 5-15 masquait les deux). */
+#define ZONE_DAMAGE 0x01u
+#define ZONE_LADDER 0x02u
 
-static u8 zone_worst_type(const NgpcTileCol *col,
+static u8 zone_passive_mask(const NgpcTileCol *col,
                            s16 wx, s16 wy, u8 rw, u8 rh)
 {
-    s16 tx0 = wx / NGPC_TILE_SIZE;
-    s16 ty0 = wy / NGPC_TILE_SIZE;
-    s16 tx1 = (wx + (s16)rw - 1) / NGPC_TILE_SIZE;
-    s16 ty1 = (wy + (s16)rh - 1) / NGPC_TILE_SIZE;
+    /* corrigé campagne 2026-11-08 : division par défaut (>> 3) et plus de bornage :
+     * hors de la map = TILE_SOLID (convention de ngpc_tilecol_type), sur les 4 bords.
+     * Avant : wx/8 arrondi vers 0 + bornes ramenées dans la map -> bords passables. */
+    s16 tx0 = (s16)(wx >> 3);
+    s16 ty0 = (s16)(wy >> 3);
+    s16 tx1 = (s16)((s16)(wx + (s16)rw - 1) >> 3);
+    s16 ty1 = (s16)((s16)(wy + (s16)rh - 1) >> 3);
     s16 tx, ty;
-    u8 worst = TILE_PASS;
+    u8 m = 0u;
 
-    if (tx0 < 0) tx0 = 0;
-    if (ty0 < 0) ty0 = 0;
 
     for (ty = ty0; ty <= ty1; ty++) {
-        if (ty >= (s16)col->map_h) break;
         for (tx = tx0; tx <= tx1; tx++) {
-            if (tx >= (s16)col->map_w) break;
             {
                 u8 t = ngpc_tilecol_type(col, tx, ty);
-                if (t == TILE_SOLID) return TILE_SOLID; /* court-circuit */
-                if (t > worst) worst = t;
+                if (t == TILE_DAMAGE)      m |= ZONE_DAMAGE;
+                else if (t == TILE_LADDER) m |= ZONE_LADDER;
             }
         }
     }
-    return worst;
+    return m;
 }
 
 /* ══════════════════════════════════════════════════════
@@ -181,13 +183,14 @@ void ngpc_tilecol_move(const NgpcTileCol *col,
             if (dx > 0) {
                 while (x > orig_x && ngpc_tilecol_rect_solid(col, x, y, rw, rh))
                     x--;
-                /* Récupérer le type du premier tile bloquant */
-                tile_x = ngpc_tilecol_type_at(col, x + (s16)rw, y);
+                /* corrigé campagne 2026-11-08 : seul TILE_SOLID bloque en X
+                 * (avant : lu au coin haut seulement -> 0 si le bas heurtait). */
+                tile_x = TILE_SOLID;
                 sides |= COL_RIGHT;
             } else {
                 while (x < orig_x && ngpc_tilecol_rect_solid(col, x, y, rw, rh))
                     x++;
-                tile_x = ngpc_tilecol_type_at(col, x - 1, y);
+                tile_x = TILE_SOLID;
                 sides |= COL_LEFT;
             }
         }
@@ -211,14 +214,16 @@ void ngpc_tilecol_move(const NgpcTileCol *col,
                     while (y > orig_y &&
                            ngpc_tilecol_rect_ground(col, x, y, rw, rh, prev_bottom))
                         y--;
-                    tile_y = ngpc_tilecol_type_at(col, x, y + (s16)rh);
+                    /* corrigé campagne 2026-11-08 : toute la largeur, pas le coin gauche */
+                    tile_y = ngpc_tilecol_rect_solid(col, x, y + (s16)rh, rw, 1)
+                             ? TILE_SOLID : TILE_ONE_WAY;
                     sides |= COL_BOTTOM;
                 } else {
                     /* Recul vers le bas (tête dans le plafond) */
                     while (y < orig_y &&
                            ngpc_tilecol_rect_solid(col, x, y, rw, rh))
                         y++;
-                    tile_y = ngpc_tilecol_type_at(col, x, y - 1);
+                    tile_y = TILE_SOLID;   /* seul SOLID bloque vers le haut */
                     sides |= COL_TOP;
                 }
             }
@@ -227,7 +232,7 @@ void ngpc_tilecol_move(const NgpcTileCol *col,
 
     /* ── Phase 3 : tiles passifs (damage, ladder) dans la zone finale ── */
     {
-        u8 passive = zone_worst_type(col, x, y, rw, rh);
+        u8 passive = zone_passive_mask(col, x, y, rw, rh);
 
         *rx = x;
         *ry = y;
@@ -236,8 +241,8 @@ void ngpc_tilecol_move(const NgpcTileCol *col,
             result->sides     = sides;
             result->tile_x    = tile_x;
             result->tile_y    = tile_y;
-            result->in_ladder = (passive == TILE_LADDER) ? 1 : 0;
-            result->in_damage = (passive == TILE_DAMAGE) ? 1 : 0;
+            result->in_ladder = (passive & ZONE_LADDER) ? 1 : 0;
+            result->in_damage = (passive & ZONE_DAMAGE) ? 1 : 0;
         }
     }
 }

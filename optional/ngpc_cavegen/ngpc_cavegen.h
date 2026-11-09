@@ -88,6 +88,12 @@ typedef struct {
  *   max_enemies : max enemies to place in the cave (recommended: 6..12)
  *   max_chests  : max chests to place (recommended: 2..5)
  *
+ * COST (measured in emulation, campagne 2026-11-08): ~160 frames (~2.7 s) per
+ * attempt on NGPC -- the island removal is a multi-pass flood fill. Call it
+ * during a loading screen, never inside gameplay. If the kept region misses the
+ * left or right third, the cave is regenerated (seed + k*0x9E37, wall_pct - 2k):
+ * at 55..65 % several attempts are common, so prefer 45..50 %.
+ *
  * After the call:
  *   out->entry_x/y    = player spawn position
  *   out->exit_x/y     = exit position

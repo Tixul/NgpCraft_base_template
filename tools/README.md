@@ -131,7 +131,7 @@ Supported PNG layouts:
 ### `ngpc_compress.py`
 **Compress binary data (tiles, maps) with RLE or LZ77/LZSS.**
 
-The output matches the decompressor embedded in `src/ngpc_lz.c`. Produces a
+The output matches the decompressor embedded in `src/fx/ngpc_lz.c`. Produces a
 `.c` file with a `const u8` array.
 
 ```sh
@@ -251,5 +251,14 @@ Not meant to be invoked directly. Used internally by `make clean` and `make`
 **Aseprite extension for working in the NGPC palette.**
 
 Contains Lua scripts to install in Aseprite to constrain colors to the NGPC
-RGB444 gamut and make hardware-correct asset creation easier. See the README
-inside the archive.
+RGB444 gamut and make hardware-correct asset creation easier. The archive holds
+`package.json` and three scripts (no README):
+
+- `snap_palette.lua` — round every palette entry to the nearest NGPC colour
+  (channels = multiples of 17: 0, 17, ..., 255);
+- `validate_palette.lua` — list the entries that are not NGPC colours;
+- `export_c.lua` — show the palette as C (`0x0BGR` words + `ngpc_gfx_set_palette`).
+
+Install: rename the file to `ngpc-aseprite-color-tools.aseprite-extension` and
+double-click it, or Aseprite > Edit > Preferences > Extensions > Add Extension.
+The `.gpl` written by `ngpc_palette_viewer.py` uses the same x17 rule.

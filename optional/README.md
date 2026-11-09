@@ -65,11 +65,11 @@ Math entière subpixel pour positions et vélocités. Indispensable dès qu'on a
 #define JUMP_VEL       FX_LIT(-3.5)
 
 FxVec2 pos = { INT_TO_FX(80), INT_TO_FX(60) };
-FxVec2 vel = FXVEC2_ZERO;
+FxVec2 vel = { 0, 0 };          /* agrégat C89 : cc900 refuse (FxVec2){...} */
 
 /* Chaque frame : */
 vel.y = FX_MIN(FX_ADD(vel.y, GRAVITY), MAX_FALL);
-pos   = FXVEC2_ADD(pos, vel);
+FXVEC2_ADD(pos, pos, vel);      /* macro-instruction : FXVEC2_ADD(dst, a, b) */
 sprite_x = FX_TO_INT(pos.x);
 sprite_y = FX_TO_INT(pos.y);
 ```
@@ -100,8 +100,8 @@ NgpcCollResult cr;
 if (ngpc_rect_test(&player_rect, &platform_rect, &cr)) {
     player.x += cr.push_x;
     player.y += cr.push_y;
-    if (cr.hit & COL_BOTTOM) on_ground = 1;
-    if (cr.hit & COL_TOP)    vel_y = 0;
+    if (cr.sides & COL_BOTTOM) on_ground = 1;
+    if (cr.sides & COL_TOP)    vel_y = 0;
 }
 
 /* Exemple balle rapide (swept) */
@@ -135,6 +135,9 @@ Gère jusqu'à 32 objets nommés par ID (0..31), teste toutes les paires en O(n�
 #define ID_E1        2
 #define ID_E2        3
 #define MASK_ENEMIES 0x0Eu  /* bits 1-3 */
+
+/* Une fois à l'init de la scène (OBLIGATOIRE : RAM non mise à 0 au boot sur console) */
+ngpc_abl_clear();
 
 /* Chaque frame, avant de tester */
 ngpc_abl_set(ID_PLAYER, player.x, player.y, 8, 12);
@@ -228,7 +231,7 @@ if (res.in_ladder) { can_climb = 1; }
 |---|---|
 | `ngpc_cam_init(cam, level_w, level_h, flags)` | Initialise (CAM_FLAG_CLAMP pour bornes de niveau) |
 | `ngpc_cam_follow(cam, tx, ty)` | Centre instantanément sur la cible |
-| `ngpc_cam_follow_smooth(cam, tx, ty, speed)` | Suivi progressif (speed 1=lent .. 8=rapide) |
+| `ngpc_cam_follow_smooth(cam, tx, ty, speed)` | Suivi progressif (speed 1=immédiat .. 8=très progressif ; 0 traité comme 1) |
 | `ngpc_cam_apply(cam, plane)` | Applique le scroll sur GFX_SCR1 / GFX_SCR2 |
 | `ngpc_cam_world_to_screen(cam, wx, wy, *sx, *sy)` | Coords monde → coords écran (pour placer sprites) |
 | `ngpc_cam_on_screen(cam, wx, wy, margin)` | 1 si visible (+ marge) — culling basique |
@@ -250,7 +253,7 @@ ngpc_sprite_move(0, sx, sy);
 ---
 
 ## `ngpc_timer` — Timers de jeu
-**Type :** .h + .c · **RAM :** 3 octets/timer · **Makefile :** `OBJS += src/ngpc_timer/ngpc_timer.rel`
+**Type :** .h + .c · **RAM :** 4 octets/timer (3 utiles, struct arrondie par cc900) · **Makefile :** `OBJS += src/ngpc_timer/ngpc_timer.rel`
 
 Countdown, cooldown, tick périodique. One-shot ou répétitif. Appeler `ngpc_timer_update()` une fois par frame.
 
@@ -283,7 +286,7 @@ if (ngpc_timer_update(&spawn_t)) { spawn_enemy(); }
 ---
 
 ## `ngpc_anim` — Animation de sprites
-**Type :** .h + .c · **RAM :** 4 octets/NgpcAnim · **Makefile :** `OBJS += src/ngpc_anim/ngpc_anim.rel`
+**Type :** .h + .c · **RAM :** 8 octets/NgpcAnim (pointeur 4 o sous cc900) · **Makefile :** `OBJS += src/ngpc_anim/ngpc_anim.rel`
 
 Séquence de frames avec vitesse configurable. Modes : LOOP, PINGPONG, ONESHOT.
 `NgpcAnimDef` est const (en ROM), `NgpcAnim` est l'état courant (en RAM).
@@ -321,7 +324,7 @@ else        ngpc_anim_play(&anim, &anim_idle);
 ---
 
 ## `ngpc_fsm` — Machine d'états
-**Type :** header-only · **RAM :** 3 octets/NgpcFsm · **Makefile :** rien
+**Type :** header-only · **RAM :** 4 octets/NgpcFsm (3 champs, arrondi à 4 par cc900) · **Makefile :** rien
 
 Suivi des transitions d'état. `ngpc_fsm_entered()` est vrai exactement 1 frame après chaque transition — idéal pour les initialisations d'état.
 
@@ -358,9 +361,9 @@ ngpc_fsm_tick(&fsm);   /* toujours en dernier */
 ---
 
 ## `ngpc_pool` — Pool d'objets
-**Type :** .h + .c · **RAM :** 3 octets/pool + taille des objets · **Makefile :** `OBJS += src/ngpc_pool/ngpc_pool.rel`
+**Type :** .h + .c · **RAM :** 4 octets/pool + taille des objets · **Makefile :** `OBJS += src/ngpc_pool/ngpc_pool.rel`
 
-Allocation/libération O(1) sans malloc. Bitmask u16 → max 16 slots. Utiliser `NGPC_POOL_DECL` pour créer un pool typé.
+Allocation/libération O(1) sans malloc. Bitmask u16 → max 16 slots (`NGPC_POOL_DECL` avec N > 16 = erreur de compilation « Negative subscript »). Utiliser `NGPC_POOL_DECL` pour créer un pool typé.
 
 | Élément | Description |
 |---|---|
@@ -437,7 +440,7 @@ if (sel != MENU_NONE) {
 
 Buffer circulaire 32 frames + détection de séquences directionnelles fighting-game style (quarter-circle, double-tap, charge…).
 Enregistre chaque frame : direction D-pad (nibble haut) + boutons pressés en rising-edge (nibble bas).
-La détection est flexible : les frames neutres entre deux steps sont ignorés.
+La détection est volontairement tolérante (style jeu de combat) : entre deux steps, toute frame qui ne correspond pas (neutre ou direction parasite) est ignorée ; seuls l'ordre des steps et la fenêtre comptent (exemples acceptés/refusés dans `ngpc_motion.h`).
 
 | Élément | Description |
 |---|---|
@@ -502,7 +505,7 @@ fx16 x = EASE_LERP(INT_TO_FX(0), INT_TO_FX(100), frame, 30, EASE_OUT_QUAD);
 ---
 
 ## `ngpc_platform` — Physique platformer
-**Type :** .h + .c · **RAM :** 11 octets · **Makefile :** `OBJS += src/ngpc_platform/ngpc_platform.rel` · **Dépend de :** ngpc_fixed
+**Type :** .h + .c · **RAM :** 12 octets · **Makefile :** `OBJS += src/ngpc_platform/ngpc_platform.rel` · **Dépend de :** ngpc_fixed
 
 Gravité, saut variable, coyote time (6 frames), jump buffer (8 frames). La collision reste dans le code jeu.
 
@@ -516,7 +519,7 @@ Gravité, saut variable, coyote time (6 frames), jump buffer (8 frames). La coll
 | `ngpc_platform_on_ground(p)` | 1 si posé |
 | `ngpc_platform_px/py(p)` | Position pixel |
 
-Constantes `#define`-surchargeables : `PLAT_GRAVITY` `PLAT_MAX_FALL` `PLAT_JUMP_VEL` `PLAT_COYOTE_FRAMES` `PLAT_JUMP_BUF_FRAMES`
+Constantes surchargeables **dans le makefile** (`CDEFS += -DPLAT_GRAVITY=8` …, pas par un `#define` avant l'include : ngpc_platform.c ne le verrait pas) : `PLAT_GRAVITY` `PLAT_MAX_FALL` `PLAT_JUMP_VEL` `PLAT_JUMP_CUT_VEL` `PLAT_COYOTE_FRAMES` `PLAT_JUMP_BUF_FRAMES`
 
 ```c
 NgpcPlatform p;
@@ -531,7 +534,7 @@ if (ngpc_pad_released & PAD_A) ngpc_platform_release_jump(&p);
 ---
 
 ## `ngpc_actor` — Mouvement top-down
-**Type :** .h + .c · **RAM :** 17 octets · **Makefile :** `OBJS += src/ngpc_actor/ngpc_actor.rel` · **Dépend de :** ngpc_fixed
+**Type :** .h + .c · **RAM :** 18 octets (17 utiles) · **Makefile :** `OBJS += src/ngpc_actor/ngpc_actor.rel` · **Dépend de :** ngpc_fixed
 
 Déplacement 4/8 directions, accélération, vitesse max, friction. Normalisation des diagonales.
 
@@ -665,7 +668,7 @@ POOL_EACH(&bullets.hdr, i) {
 ---
 
 ## `ngpc_kinematic` — Corps physique générique
-**Type :** .h + .c · **RAM :** 11 octets · **Makefile :** `OBJS += src/ngpc_kinematic/ngpc_kinematic.rel` · **Dépend de :** ngpc_fixed, ngpc_tilecol
+**Type :** .h + .c · **RAM :** 14 octets · **Makefile :** `OBJS += src/ngpc_kinematic/ngpc_kinematic.rel` · **Dépend de :** ngpc_fixed, ngpc_tilecol
 
 Corps générique avec vélocité fx16, friction multiplicative et rebond. Intègre `ngpc_tilecol_move()` — pour rochers, barils, balles, ennemis à physique simple.
 
@@ -840,7 +843,7 @@ if (dst && *dst == CELL_EMPTY) { *dst = CELL_PLAYER; ngpc_grid_set(&grid, px, py
 ---
 
 ## `ngpc_path` — Pathfinding BFS
-**Type :** .h + .c · **RAM :** 320 octets statiques internes · **Makefile :** `OBJS += src/ngpc_path/ngpc_path.rel` · **Dépend de :** rien
+**Type :** .h + .c · **RAM :** 512 octets statiques internes (dist 256 + file 256) + 66 octets par `NgpcPath` · **Makefile :** `OBJS += src/ngpc_path/ngpc_path.rel` · **Dépend de :** rien
 
 BFS flood-fill inverse (depuis la cible) sur grille max 16×16. Retourne le premier pas ou la distance totale. Map compatible `NgpcTileCol` (0 = passable).
 
@@ -848,6 +851,11 @@ BFS flood-fill inverse (depuis la cible) sur grille max 16×16. Retourne le prem
 |---|---|
 | `ngpc_path_step(map, w, h, sx, sy, tx, ty, *dx, *dy)` | Premier pas vers la cible (retourne 1 si chemin trouvé) |
 | `ngpc_path_dist(map, w, h, sx, sy, tx, ty)` | Distance (PATH_NO_PATH = 0xFF si inaccessible) |
+| `ngpc_path_build(&p, map, w, h, sx, sy, tx, ty)` | Calcule UNE fois le chemin complet dans un `NgpcPath` (retourne la longueur) |
+| `ngpc_path_next(&p, &dx, &dy)` / `ngpc_path_remaining(&p)` | Pas suivant (0 = fini) / pas restants |
+
+> Coût : chaque `step`/`dist`/`build` refait un BFS (~2 images CPU sur 15×15). Pour plusieurs ennemis,
+> faire un `build` quand la cible change de case, puis `next` à chaque déplacement.
 
 ```c
 /* Ennemi suit le joueur : */
@@ -1113,7 +1121,7 @@ PRNG avec état explicite par instance. Contrairement à `ngpc_random()` (état 
 |---|---|
 | `NgpcRng` | Struct d'état (4 octets : `u32 state`) |
 | `ngpc_rng_init(rng, seed)` | Seed fixe → séquence reproductible |
-| `ngpc_rng_init_vbl(rng)` | Seed depuis le timer hardware → aléatoire |
+| `ngpc_rng_init_vbl(rng)` | Seed depuis le compteur d'images `g_vb_counter` (macro) → aléatoire seulement si appelé après une attente du joueur (« PRESS START ») |
 | `ngpc_rng_next(rng)` | u16 dans [0..65535] |
 | `ngpc_rng_u8(rng)` | u8 dans [0..255] |
 | `ngpc_rng_range(rng, min, max)` | u8 dans [min..max] inclus |
@@ -1193,7 +1201,7 @@ ngpc_procgen_load_room(&donjon, donjon.start_idx, g_procgen_rooms,
 u8 next = ngpc_procgen_neighbor(&donjon, donjon.current_idx, PROCGEN_DIR_E);
 if (next != PROCGEN_IDX_NONE)
     ngpc_procgen_load_room(&donjon, next, g_procgen_rooms, room_cb,
-                           PROCGEN_DIR_E, NULL);
+                           PROCGEN_DIR_W, NULL);  /* on ARRIVE par l'Ouest (opposé du sens de marche) */
 ```
 
 ---
@@ -1259,7 +1267,7 @@ void cave_update(void) {
 ---
 
 ## `ngpc_dungeongen` — Générateur de salle de donjon scrollable ✅ Validé
-**Type :** .h + .c · **RAM :** ~30 octets (state interne) · **Makefile :** `OBJS += $(OBJ_DIR)/optional/ngpc_dungeongen/ngpc_dungeongen.rel $(OBJ_DIR)/GraphX/tiles_procgen.rel $(OBJ_DIR)/GraphX/sprites_lab.rel` · **Dépend de :** ngpc_gfx, ngpc_sprite, ngpc_rtc
+**Type :** .h + .c · **RAM :** ~30 octets (state interne) · **Makefile :** `OBJS += $(OBJ_DIR)/optional/ngpc_dungeongen/ngpc_dungeongen.rel` (graphismes de remplacement inclus : `dungeongen_assets_default.h` ; graphismes du jeu : `CDEFS += -DDUNGEONGEN_GAME_ASSETS` + `tiles_procgen.h`/`sprites_lab.h`, symboles listés dans ce fichier) · **Dépend de :** ngpc_gfx, ngpc_sprite, ngpc_rtc
 
 Génère et dessine des **salles de donjon riches et scrollables** (jusqu'à 16×16 metatiles, soit 32×32 tiles NGPC).
 Complémentaire de `ngpc_procgen` (navigation DFS multi-room) et `ngpc_cavegen` (cave cellulaire) :
@@ -1325,8 +1333,8 @@ Par défaut 2×2 tiles NGPC = metatile 16×16px. Passez `-DDUNGEONGEN_CELL_W_TIL
 
 | Fonction | Description |
 |---|---|
-| `ngpc_dungeongen_set_rtc_seed()` | Seed session RTC — appeler une fois au boot |
-| `ngpc_dungeongen_init()` | Charge tiles + sprites en VRAM, configure palettes |
+| `ngpc_dungeongen_init()` | Charge tiles + sprites en VRAM, configure palettes, seed de session = 0 |
+| `ngpc_dungeongen_set_rtc_seed()` / `ngpc_dungeongen_set_seed(s)` | Seed de session (RTC ou explicite) — **après** `init()` |
 | `ngpc_dungeongen_enter(room_idx, style_idx)` | Génère et dessine la salle. `style_idx=0xFF` = auto |
 | `ngpc_dungeongen_n_styles()` | Nombre de styles disponibles (= `DUNGEONGEN_N_STYLES`) |
 | `ngpc_dungeongen_spawn()` | Spawne ennemis + item en sprites |
@@ -1349,8 +1357,8 @@ ngpc_dgroom.item_active        /* 1 si item présent */
 ```makefile
 # build_utils.py inclut déjà 'optional' et 'GraphX' dans les -I
 OBJS += $(OBJ_DIR)/optional/ngpc_dungeongen/ngpc_dungeongen.rel
-OBJS += $(OBJ_DIR)/GraphX/tiles_procgen.rel
-OBJS += $(OBJ_DIR)/GraphX/sprites_lab.rel
+# graphismes de remplacement inclus (dungeongen_assets_default.h) ; ceux du jeu :
+# CDEFS += -DDUNGEONGEN_GAME_ASSETS  + tiles_procgen.h / sprites_lab.h
 ```
 ```c
 #include "ngpc_dungeongen/ngpc_dungeongen.h"
@@ -1358,8 +1366,8 @@ OBJS += $(OBJ_DIR)/GraphX/sprites_lab.rel
 
 **Usage minimal :**
 ```c
-ngpc_dungeongen_set_rtc_seed();     /* 1 fois au boot */
-ngpc_dungeongen_init();             /* après ngpc_init() */
+ngpc_dungeongen_init();             /* après ngpc_init() ; seed = 0 */
+ngpc_dungeongen_set_rtc_seed();     /* APRÈS init : seed de session RTC */
 ngpc_dungeongen_enter(0u, 0xFFu);   /* room 0, style auto */
 ngpc_dungeongen_spawn();            /* ennemis + item */
 
@@ -1377,7 +1385,7 @@ ngpc_dungeongen_spawn();
 ---
 
 ## `ngpc_seq` — Séquenceur PSG minimal
-**Type :** .h + .c · **RAM :** 12 octets (4 slots NgpcSeqState) · **Makefile :** `OBJS += src/ngpc_seq/ngpc_seq.rel` · **Dépend de :** `sounds.h` (core)
+**Type :** .h + .c · **RAM :** 32 octets (4 slots NgpcSeqState de 8 o) · **Makefile :** `OBJS += src/ngpc_seq/ngpc_seq.rel` · **Dépend de :** `sounds.h` (core)
 
 Joue des tables de notes sur les 4 canaux T6W28 PSG **sans tracker ni Sound Creator**.
 Utile pour les jingles de menu, fanfares, sons de gameplay simples, ou projets NGPCraft
@@ -1478,7 +1486,7 @@ if (ngpc_transition_active(&tr)) skip_input();
 ---
 
 ### `ngpc_wave` — Vagues d'ennemis scriptées
-**Type :** .h + .c · **RAM :** 7 octets par `NgpcWaveSeq` · **ROM :** 6 octets par `NgpcWaveEntry`
+**Type :** .h + .c · **RAM :** 10 octets par `NgpcWaveSeq` (cc900) · **ROM :** 6 octets par `NgpcWaveEntry`
 
 Rejoue un tableau ROM d'événements de spawn trié par délai croissant.
 Compatible avec les timers frame ou les compteurs de scroll (shmup, tower defense).
@@ -1487,7 +1495,7 @@ Compatible avec les timers frame ou les compteurs de scroll (shmup, tower defens
 |---|---|
 | `NgpcWaveEntry {type, x, y, data, delay}` | Entrée ROM : type ennemi, position, délai en frames |
 | `WAVE_END` | Sentinelle de fin de tableau (delay == 0xFFFF) |
-| `WAVE_COUNT(arr)` | Macro : nombre d'entrées sans le sentinel |
+| `WAVE_COUNT(arr)` | Macro : nombre d'entrées, sentinelle COMPRISE (passer `WAVE_COUNT(arr) - 1`) |
 | `ngpc_wave_start(seq, entries, count)` | Initialise et démarre la séquence |
 | `ngpc_wave_update(seq)` | Avance timer + retourne `NgpcWaveEntry*` si spawn dû, sinon NULL |
 | `ngpc_wave_tick(seq)` | Avance le timer uniquement |
@@ -1622,13 +1630,13 @@ ngpc_inv_equip(&inv, INV_SLOT_WEAPON, ITEM_SWORD);
 u8 weapon = ngpc_inv_equipped(&inv, INV_SLOT_WEAPON);  /* → ITEM_SWORD */
 ```
 
-> **Taille configurable :** `#define INV_SLOTS 8` et/ou `#define INV_EQUIP_SLOTS 2`
+> **Taille configurable :** `CDEFS += -DINV_SLOTS=8 -DINV_EQUIP_SLOTS=2` dans le makefile (PAS un `#define` avant l'include : `ngpc_inventory.c` ne le verrait pas → RAM écrasée)
 > avant d'inclure le header pour réduire la RAM.
 
 ---
 
 ### `ngpc_score` — Score courant + table des meilleurs scores
-**Type :** .h + .c · **RAM :** 4 octets (`NgpcScore`) + 11 octets (`NgpcScoreTable`, top 5)
+**Type :** .h + .c · **RAM :** 4 octets (`NgpcScore`) + 12 octets (`NgpcScoreTable`, top 5, 11 utiles)
 
 Score u32 (deux u16 pour éviter les ops 32-bit sur TLCS-900) + table de high scores triée décroissante.
 
@@ -1691,7 +1699,7 @@ Modèle physique simplifié style Micro Machines : vitesse scalaire (avant/arri�
 | `NgpcVehicle {pos, speed, dir, flags}` | 8 octets — position fx16, vitesse fx16, direction 0-7, flags d'état |
 | `ngpc_vehicle_init(v, px, py, dir)` | Initialise à la position pixel, vitesse = 0 |
 | `ngpc_vehicle_steer(v, delta)` | Tourne de ±1 cran (modulo 8) |
-| `ngpc_vehicle_accel(v, amount, max_speed)` | Accélère de `amount` fx16, clampé à `[-max_speed, max_speed]` |
+| `ngpc_vehicle_accel(v, amount, max_speed)` | Accélère de `amount` fx16, clampé à `[max(-max_speed, VEH_SPEED_REVERSE), max_speed]` (marche arrière limitée à −1,5 px/frame par défaut) |
 | `ngpc_vehicle_brake(v, amount)` | Décélère vers 0 de `amount` fx16 |
 | `ngpc_vehicle_update(v, col, rw, rh)` | Met à jour la physique : surface, friction, déplacement, collisions |
 | `VEH_FLAG_WALL_HIT` | Rebond sur mur ce frame |
@@ -1733,8 +1741,8 @@ static NgpcVehicle car;
 ngpc_vehicle_init(&car, 80, 60, 0);  /* position (80,60), cap Est */
 
 /* Game loop */
-if (btn & BTN_RIGHT) ngpc_vehicle_steer(&car, +1);
-if (btn & BTN_LEFT)  ngpc_vehicle_steer(&car, -1);
+if (btn & BTN_RIGHT) ngpc_vehicle_steer(&car, -1);   /* -1 = horaire (droite) */
+if (btn & BTN_LEFT)  ngpc_vehicle_steer(&car, +1);   /* +1 = anti-horaire (gauche) */
 if (btn & BTN_A)     ngpc_vehicle_accel(&car, VEH_ACCEL_DEFAULT, VEH_SPEED_MAX);
 if (btn & BTN_B)     ngpc_vehicle_brake(&car, VEH_BRAKE_FORCE);
 ngpc_vehicle_update(&car, &col, 8, 8);
@@ -1783,7 +1791,9 @@ extern const NgpcPbTile g_puzzle01_push_block_tiles[];
 #define PUZZLE01_PUSH_BLOCK_COUNT 3
 
 static NgpcPushBlock blocks[PUZZLE01_PUSH_BLOCK_COUNT];
-for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++)
+u8 i;   /* cc900 (C89) : variables déclarées en tête de bloc, jamais dans le for */
+s16 px, py;
+for (i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++)
     ngpc_pushblock_init(&blocks[i], g_puzzle01_push_block_tiles[i].tx,
                                     g_puzzle01_push_block_tiles[i].ty);
 
@@ -1791,16 +1801,17 @@ for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++)
 if (btn_pressed & BTN_A) {
     s8 dx = player_dir_x;  /* -1, 0, +1 */
     s8 dy = player_dir_y;
-    for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
-        u8 r = ngpc_pushblock_try_push(&blocks[i], blocks, PUZZLE01_PUSH_BLOCK_COUNT,
+    u8 r;
+    for (i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
+        r = ngpc_pushblock_try_push(&blocks[i], blocks, PUZZLE01_PUSH_BLOCK_COUNT,
                                         player_tx, player_ty, dx, dy, &col, 0);
         if (r == PUSH_VOID) { blocks[i].active = 0; }   /* bloc tombé dans le vide */
     }
 }
 
 /* Vérifier victoire : tous les blocs sur leur case cible */
-u8 solved = 1;
-for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
+u8 solved = 1;   /* (à déclarer en tête de bloc avec i) */
+for (i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
     /* Région cible exportée par l'éditeur (rx,ry = coin, rw=rh=1) */
     if (!ngpc_pushblock_on_region(&blocks[i], target_rx[i], target_ry[i], 1, 1))
         solved = 0;
@@ -1808,9 +1819,8 @@ for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
 if (solved) fsm_set_state(STATE_WIN);
 
 /* Rendu */
-for (u8 i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
+for (i = 0; i < PUZZLE01_PUSH_BLOCK_COUNT; i++) {
     if (!blocks[i].active) continue;
-    s16 px, py;
     ngpc_pushblock_pixel(&blocks[i], 8, &px, &py);
     ngpc_sprite_draw(SPR_BLOCK, px - cam_x, py - cam_y);
 }

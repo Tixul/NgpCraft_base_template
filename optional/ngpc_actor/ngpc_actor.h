@@ -4,7 +4,7 @@
 /*
  * ngpc_actor -- Mouvement top-down 4/8 directions avec friction
  * =============================================================
- * 17 octets RAM par NgpcActor.
+ * 17 octets utiles par NgpcActor (sizeof = 18 sous cc900).
  * Adapté RPG, twin-stick, dungeon crawler.
  *
  * Principe :
@@ -31,8 +31,8 @@
  *                   ACTOR_DEFAULT_FRICTION);
  *
  *   // Chaque frame :
- *   s8 dx = (ngpc_pad & PAD_RIGHT) - (ngpc_pad & PAD_LEFT ? 1 : 0);
- *   s8 dy = (ngpc_pad & PAD_DOWN)  - (ngpc_pad & PAD_UP   ? 1 : 0);
+ *   s8 dx = (ngpc_pad_held & PAD_RIGHT) ? 1 : (ngpc_pad_held & PAD_LEFT) ? -1 : 0;
+ *   s8 dy = (ngpc_pad_held & PAD_DOWN)  ? 1 : (ngpc_pad_held & PAD_UP)   ? -1 : 0;
  *   ngpc_actor_move(&hero, dx, dy);
  *   ngpc_actor_update(&hero);
  *   ngpc_sprite_set(0, ngpc_actor_px(&hero), ngpc_actor_py(&hero), tile, pal, hero.dir_x < 0 ? SPR_HFLIP : 0);
@@ -56,7 +56,7 @@
 #define _ACTOR_DIAG_NORM  ((fx16)11)
 
 /* ── Flags ───────────────────────────────────────────────── */
-#define ACTOR_MOVING  0x01   /* ngpc_actor_move() a été appelé ce frame */
+#define ACTOR_MOVING  0x01   /* ngpc_actor_move() a été appelé ce frame (lisible après update) */
 
 /* ── Struct (17 octets RAM) ──────────────────────────────── */
 typedef struct {

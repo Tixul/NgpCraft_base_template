@@ -33,12 +33,14 @@
  *
  * Room navigation:
  *
+ *   // Walking EAST: the player ARRIVES through the WEST door of the next room.
+ *   // entry_dir = opposite of the travel direction = dir ^ 1 (N<->S, W<->E).
  *   u8 next = ngpc_procgen_neighbor(&dungeon, dungeon.current_idx, PROCGEN_DIR_E);
  *   if (next != 0xFF) {
  *       ngpc_procgen_load_room(&dungeon, next, g_templates,
- *                              my_load_callback, PROCGEN_DIR_E, NULL);
+ *                              my_load_callback, PROCGEN_DIR_W, NULL);
  *       u8 sx, sy;
- *       ngpc_procgen_spawn_pos(PROCGEN_DIR_E, &sx, &sy);
+ *       ngpc_procgen_spawn_pos(PROCGEN_DIR_W, &sx, &sy);   // x = 1, next to the W door
  *       player.x = (s16)sx * 8;
  *       player.y = (s16)sy * 8;
  *   }
@@ -58,13 +60,19 @@
 #ifndef PROCGEN_MAX_ROOMS
 #define PROCGEN_MAX_ROOMS   ((u8)(PROCGEN_GRID_W * PROCGEN_GRID_H))
 #endif
+/* corrigé campagne 2026-11-08 : the DFS marks visited cells in a u16 bitmask. */
+#if (PROCGEN_GRID_W * PROCGEN_GRID_H) > 16
+#error "ngpc_procgen: PROCGEN_GRID_W * PROCGEN_GRID_H must be <= 16 (u16 visited mask)"
+#endif
 /* Rooms actually generated. < MAX_ROOMS -> non-full grid. */
 #ifndef PROCGEN_MAX_ACTIVE
 #define PROCGEN_MAX_ACTIVE  12
 #endif
-/* Maximum size of the user template array. */
+/* Kept for compatibility only: the template array is no longer limited
+ * (tpl_count is a u8, up to 255 entries; corrigé campagne 2026-11-08 : the
+ * old limit of 16 silently ignored templates 16..47 of ngpc_procgen_rooms.h). */
 #ifndef PROCGEN_MAX_TEMPLATES
-#define PROCGEN_MAX_TEMPLATES  16
+#define PROCGEN_MAX_TEMPLATES  255
 #endif
 
 /* ── NGPC screen dimensions and door positions ───────────────────────── */

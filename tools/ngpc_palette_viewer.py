@@ -56,11 +56,12 @@ def rgb444_to_rgb888(v: int) -> tuple[int, int, int]:
       bits  3-0  = R nibble
       bits  7-4  = G nibble
       bits 11-8  = B nibble
-    Expand each nibble to 8 bits by shifting left 4.
+    Expand each nibble to 8 bits as n * 17 (0..255), the same rule as the
+    Aseprite extension (corrigé campagne 2026-11-08 : was << 4, 15 -> 240).
     """
-    r = (v & 0x00F) << 4
-    g = ((v >> 4) & 0xF) << 4
-    b = ((v >> 8) & 0xF) << 4
+    r = (v & 0x00F) * 17
+    g = ((v >> 4) & 0xF) * 17
+    b = ((v >> 8) & 0xF) * 17
     return (r, g, b)
 
 def rgb888_to_gpl(rgb: tuple[int, int, int], label: str) -> str:
@@ -171,12 +172,12 @@ def write_gpl(slots: list[PaletteSlot | None], out_path: Path) -> None:
 
     Layout: 5 columns per row (Columns: 5).
     Each row = 1 palette slot: [transparent][c1][c2][c3][SEPARATOR]
-    The separator (bright magenta 255,0,255) is not a valid NGPC color
-    (NGPC channels are multiples of 16 only) so it is easy to spot.
+    The separator (magenta 250,0,250) is not a valid NGPC color
+    (NGPC channels are multiples of 17 only) so it is easy to spot.
     Total entries: MAX_SLOTS * 5 = 80.
     """
     # Separator color: bright magenta — clearly not an NGPC RGB444 color.
-    SEP_RGB   = (255, 0, 255)
+    SEP_RGB   = (250, 0, 250)
     SEP_LABEL = "---"
 
     used_count = sum(1 for s in slots if s is not None)
@@ -190,8 +191,8 @@ def write_gpl(slots: list[PaletteSlot | None], out_path: Path) -> None:
         f"# NGPC sprite palettes — {used_count}/{MAX_SLOTS} slots used, {free_count} free",
         "# Layout: 5 cols per row = [transparent][c1][c2][c3][magenta separator]",
         "# Index 0 of each slot = TRANSPARENT (always black in GPL, do not paint with it)",
-        "# Colors are RGB444 expanded to RGB888 (multiples of 16 per channel)",
-        "# Magenta (255,0,255) = slot separator, NOT a game color",
+        "# Colors are RGB444 expanded to RGB888 (multiples of 17 per channel)",
+        "# Magenta (250,0,250) = slot separator, NOT a game color",
         "#",
     ]
 
@@ -331,7 +332,7 @@ def write_txt(slots: list[PaletteSlot | None], out_path: Path) -> None:
             else:
                 v   = ps.raw_colors[i]
                 rgb = rgb444_to_rgb888(v)
-                lines.append(f"        [{i}] #{v:03X}  ->  rgb({rgb[0]}, {rgb[1]}, {rgb[2]})")
+                lines.append(f"        [{i}] 0x{v:03X} (0BGR)  ->  rgb({rgb[0]}, {rgb[1]}, {rgb[2]})")
         lines.append("")
 
     if free:

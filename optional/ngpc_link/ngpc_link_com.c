@@ -7,6 +7,9 @@
  *
  * cc900 ABI: arguments on the stack (xsp+4, xsp+8), result in WA. Nothing here
  * returns a value -- see point 1 in the header.
+ * cc900 also assumes XIX/XIY are preserved by the callee: every wrapper pushes
+ * XIX before loading the BIOS vector into it, so the arguments are read at
+ * xsp+8 / xsp+12 (corrigé campagne 2026-11-08, modèle : src/core/ngpc_rtc.c).
  */
 
 #include "ngpc_link/ngpc_link_com.h"
@@ -23,6 +26,7 @@
 
 void ngpc_com_init(void)
 {
+    __asm(" push xix");          /* corrigé campagne 2026-11-08 : cc900 suppose XIX conservé */
     __asm(" ld rw3, 0x10");
     __asm(" ldf 3");
     __asm(" add w, w");
@@ -30,11 +34,13 @@ void ngpc_com_init(void)
     __asm(" ld xix, 0xfffe00");
     __asm(" ld xix, (xix+w)");
     __asm(" call xix");
+    __asm(" pop xix");
     COM_RESTORE_IFF();
 }
 
 void ngpc_com_send_start(void)
 {
+    __asm(" push xix");          /* corrigé campagne 2026-11-08 : cc900 suppose XIX conservé */
     __asm(" ld rw3, 0x11");
     __asm(" ldf 3");
     __asm(" add w, w");
@@ -42,11 +48,13 @@ void ngpc_com_send_start(void)
     __asm(" ld xix, 0xfffe00");
     __asm(" ld xix, (xix+w)");
     __asm(" call xix");
+    __asm(" pop xix");
     COM_RESTORE_IFF();
 }
 
 void ngpc_com_recv_start(void)
 {
+    __asm(" push xix");          /* corrigé campagne 2026-11-08 : cc900 suppose XIX conservé */
     __asm(" ld rw3, 0x12");
     __asm(" ldf 3");
     __asm(" add w, w");
@@ -54,11 +62,13 @@ void ngpc_com_recv_start(void)
     __asm(" ld xix, 0xfffe00");
     __asm(" ld xix, (xix+w)");
     __asm(" call xix");
+    __asm(" pop xix");
     COM_RESTORE_IFF();
 }
 
 void ngpc_com_rts_on(void)
 {
+    __asm(" push xix");          /* corrigé campagne 2026-11-08 : cc900 suppose XIX conservé */
     __asm(" ld rw3, 0x15");
     __asm(" ldf 3");
     __asm(" add w, w");
@@ -66,6 +76,7 @@ void ngpc_com_rts_on(void)
     __asm(" ld xix, 0xfffe00");
     __asm(" ld xix, (xix+w)");
     __asm(" call xix");
+    __asm(" pop xix");
     COM_RESTORE_IFF();
 }
 
@@ -73,6 +84,7 @@ void ngpc_com_rts_off(void)
 {
     /* The BIOS does `ei 6` in here: without the trailing `ei 0`, VBlank stays
      * masked and a real console powers off through the watchdog in ~1 s. */
+    __asm(" push xix");          /* corrigé campagne 2026-11-08 : cc900 suppose XIX conservé */
     __asm(" ld rw3, 0x16");
     __asm(" ldf 3");
     __asm(" add w, w");
@@ -80,6 +92,7 @@ void ngpc_com_rts_off(void)
     __asm(" ld xix, 0xfffe00");
     __asm(" ld xix, (xix+w)");
     __asm(" call xix");
+    __asm(" pop xix");
     COM_RESTORE_IFF();
 }
 
@@ -87,8 +100,9 @@ void ngpc_com_rts_off(void)
 
 void ngpc_com_create_data(u8 b)
 {
+    __asm(" push xix");          /* corrigé campagne 2026-11-08 : cc900 suppose XIX conservé */
     __asm(" ld rw3, 0x13");
-    __asm(" ld xde, (xsp+4)");    /* first argument off the stack */
+    __asm(" ld xde, (xsp+8)");    /* first argument off the stack */
     __asm(" ld b, e");            /* rb3 = byte */
     __asm(" ldf 3");
     __asm(" add w, w");
@@ -96,6 +110,7 @@ void ngpc_com_create_data(u8 b)
     __asm(" ld xix, 0xfffe00");
     __asm(" ld xix, (xix+w)");
     __asm(" call xix");
+    __asm(" pop xix");
     COM_RESTORE_IFF();
 }
 
@@ -103,6 +118,7 @@ void ngpc_com_create_data(u8 b)
 
 void ngpc_com_get_data(u8 *out)
 {
+    __asm(" push xix");          /* corrigé campagne 2026-11-08 : cc900 suppose XIX conservé */
     __asm(" ld rw3, 0x14");
     __asm(" ldf 3");
     __asm(" add w, w");
@@ -110,8 +126,9 @@ void ngpc_com_get_data(u8 *out)
     __asm(" ld xix, 0xfffe00");
     __asm(" ld xix, (xix+w)");
     __asm(" call xix");
-    __asm(" ld xde, (xsp+4)");    /* output pointer (xsp restored by the BIOS) */
+    __asm(" ld xde, (xsp+8)");    /* output pointer (xsp restored by the BIOS) */
     __asm(" ld (xde), b");        /* *out = received byte */
+    __asm(" pop xix");
     COM_RESTORE_IFF();
 }
 
@@ -119,9 +136,10 @@ void ngpc_com_get_data(u8 *out)
 
 void ngpc_com_send_block(const u8 *p, u8 n)
 {
+    __asm(" push xix");          /* corrigé campagne 2026-11-08 : cc900 suppose XIX conservé */
     __asm(" ld rw3, 0x19");
-    __asm(" ld xhl, (xsp+4)");    /* pointer -> xhl3 */
-    __asm(" ld xde, (xsp+8)");    /* size */
+    __asm(" ld xhl, (xsp+8)");    /* pointer -> xhl3 */
+    __asm(" ld xde, (xsp+12)");    /* size */
     __asm(" ld b, e");            /* rb3 = size */
     __asm(" ldf 3");
     __asm(" add w, w");
@@ -129,14 +147,16 @@ void ngpc_com_send_block(const u8 *p, u8 n)
     __asm(" ld xix, 0xfffe00");
     __asm(" ld xix, (xix+w)");
     __asm(" call xix");
+    __asm(" pop xix");
     COM_RESTORE_IFF();
 }
 
 void ngpc_com_get_block(u8 *p, u8 n)
 {
+    __asm(" push xix");          /* corrigé campagne 2026-11-08 : cc900 suppose XIX conservé */
     __asm(" ld rw3, 0x1a");
-    __asm(" ld xhl, (xsp+4)");
-    __asm(" ld xde, (xsp+8)");
+    __asm(" ld xhl, (xsp+8)");
+    __asm(" ld xde, (xsp+12)");
     __asm(" ld b, e");
     __asm(" ldf 3");
     __asm(" add w, w");
@@ -144,6 +164,7 @@ void ngpc_com_get_block(u8 *p, u8 n)
     __asm(" ld xix, 0xfffe00");
     __asm(" ld xix, (xix+w)");
     __asm(" call xix");
+    __asm(" pop xix");
     COM_RESTORE_IFF();
 }
 
@@ -151,6 +172,7 @@ void ngpc_com_get_block(u8 *p, u8 n)
 
 void ngpc_com_send_status(u16 *out)
 {
+    __asm(" push xix");          /* corrigé campagne 2026-11-08 : cc900 suppose XIX conservé */
     __asm(" ld rw3, 0x17");
     __asm(" ldf 3");
     __asm(" add w, w");
@@ -158,13 +180,15 @@ void ngpc_com_send_status(u16 *out)
     __asm(" ld xix, 0xfffe00");
     __asm(" ld xix, (xix+w)");
     __asm(" call xix");
-    __asm(" ld xde, (xsp+4)");
+    __asm(" ld xde, (xsp+8)");
     __asm(" ld (xde), wa");
+    __asm(" pop xix");
     COM_RESTORE_IFF();
 }
 
 void ngpc_com_recv_status(u16 *out)
 {
+    __asm(" push xix");          /* corrigé campagne 2026-11-08 : cc900 suppose XIX conservé */
     __asm(" ld rw3, 0x18");
     __asm(" ldf 3");
     __asm(" add w, w");
@@ -172,8 +196,9 @@ void ngpc_com_recv_status(u16 *out)
     __asm(" ld xix, 0xfffe00");
     __asm(" ld xix, (xix+w)");
     __asm(" call xix");
-    __asm(" ld xde, (xsp+4)");
+    __asm(" ld xde, (xsp+8)");
     __asm(" ld (xde), wa");
+    __asm(" pop xix");
     COM_RESTORE_IFF();
 }
 

@@ -5,7 +5,7 @@
  * ngpc_anim -- Animation de sprites par séquence de frames
  * =========================================================
  * NgpcAnimDef : définition statique en ROM (const), zéro RAM.
- * NgpcAnim    : état courant en RAM, 4 octets par sprite animé.
+ * NgpcAnim    : état courant en RAM, 8 octets par sprite animé (pointeur 4 o sous cc900).
  *
  * Modes : LOOP (boucle), PINGPONG (aller-retour), ONESHOT (joue une fois).
  * Dépendance : aucune (stand-alone).
@@ -46,7 +46,7 @@ typedef struct {
  * Ex: static const NgpcAnimDef anim_idle = ANIM_DEF(idle_frames, 2, 8, ANIM_LOOP); */
 #define ANIM_DEF(frm, cnt, spd, flg) { (frm), (u8)(cnt), (u8)(spd), (u8)(flg) }
 
-/* ── État courant (en RAM, 4 octets) ────────────────────── */
+/* ── État courant (en RAM, 8 octets sous cc900) ─────────── */
 typedef struct {
     const NgpcAnimDef *def;    /* définition courante (NULL = pas d'anim) */
     u8 frame;                  /* index courant dans def->frames[] */

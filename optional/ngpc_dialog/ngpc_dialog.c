@@ -302,7 +302,7 @@ static void _draw_next_char(const NgpcDialog *d)
     NgpcDialogLayout lay;
     NgpcDialogCursor cur;
     const char *p;
-    u8 i;
+    u16 i;  /* corrigé campagne 2026-11-08 : char_idx est u16 */
 
     if (!d->text || d->text[d->char_idx] == '\0') return;
 
@@ -321,7 +321,7 @@ static void _redraw_text(const NgpcDialog *d)
     NgpcDialogLayout lay;
     NgpcDialogCursor cur;
     const char *p;
-    u8 i;
+    u16 i;  /* corrigé campagne 2026-11-08 : char_idx est u16 */
 
     _calc_layout(d, &lay);
     _draw_speaker(d, &lay);

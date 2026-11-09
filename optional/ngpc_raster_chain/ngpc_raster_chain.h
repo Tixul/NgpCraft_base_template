@@ -20,14 +20,20 @@
  *
  * Limitation:
  *   - Maximum RCHAIN_MAX_SPLITS splits per frame
- *   - Accuracy ±1 scanline (TREG0 latency after TRUN restart)
+ *   - Exact line in emulation, including splits on consecutive lines
+ *     (corrigé campagne 2026-11-08 : TI0 pulses one line ahead, the timer is no
+ *     longer stopped in the ISR, the ISR is precomputed by arm()). A CONFIRMER
+ *     SUR CONSOLE : ROM de mire b/mire_raster_chain.
+ *   - A split at line 0 is written by arm() itself (VBlank). Without one, the
+ *     top of the screen keeps the last split of the previous frame.
+ *   - Splits on the same line: the last one wins.
  *   - Writes all 4 scroll registers (SCR1_X/Y and SCR2_X/Y) at each split
  *
  * RESOURCE CONFLICT: shares Timer0 with ngpc_raster, ngpc_dma_raster,
  *   and ngpc_sprmux. Use only one at a time.
  *
  * Usage:
- *   static const RasterSplit splits[] = {
+ *   static const RChainSplit splits[] = {
  *       { 0,   0, 0,  0, 0  },  // line 0 : scroll baseline
  *       { 64,  8, 0,  4, 0  },  // line 64: background slower
  *       { 128, 0, 0,  0, 0  },  // line 128: HUD, no scroll

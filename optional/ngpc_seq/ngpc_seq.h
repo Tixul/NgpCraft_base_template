@@ -23,7 +23,7 @@
  * Sequence format:
  *   Array of NgpcSeqNote terminated by NGPC_SEQ_END or NGPC_SEQ_LOOP.
  *   { note, attn, dur }
- *     note : 0 = silence, 1..50 = pitch (index into NOTE_TABLE)
+ *     note : 0 = silence, 1..50 = pitch (index into NOTE_TABLE), > 50 = silence
  *            channel 3 (noise): 1..7 = noise rate, 0 = silence
  *     attn : volume, 0 = loudest, 15 = silent (T6W28 attenuation)
  *     dur  : duration in VBL frames (1..254)

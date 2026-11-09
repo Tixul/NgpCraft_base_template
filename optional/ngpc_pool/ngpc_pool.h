@@ -73,15 +73,20 @@ void ngpc_pool_clear(NgpcPoolHdr *p);
 
 /* ── Macro de déclaration d'un pool typé ────────────────── */
 /* Crée un type struct { NgpcPoolHdr hdr; Type items[N]; }    */
+/* corrigé campagne 2026-11-08 : N > POOL_MAX (16) refusé À LA COMPILATION
+ * (le masque u16 ne suit que 16 slots ; avant, 1u << 16 donnait un slot
+ * fantôme). Erreur cc900 sur <Name>_N_max_16 = "taille de tableau négative". */
 #define NGPC_POOL_DECL(Name, Type, N) \
+    typedef char Name##_N_max_16[((N) >= 1 && (N) <= POOL_MAX) ? 1 : -1]; \
     typedef struct { NgpcPoolHdr hdr; Type items[(N)]; } Name
 
 /* ── Macro d'initialisation (à appeler avant le premier alloc) */
+/* Capacité bornée à POOL_MAX par sécurité (pool déclaré à la main). */
 #define NGPC_POOL_INIT(pool_ptr, N) \
     do { \
         (pool_ptr)->hdr.mask     = 0; \
         (pool_ptr)->hdr.count    = 0; \
-        (pool_ptr)->hdr.capacity = (u8)(N); \
+        (pool_ptr)->hdr.capacity = (u8)(((N) > POOL_MAX) ? POOL_MAX : (N)); \
     } while(0)
 
 #endif /* NGPC_POOL_H */

@@ -43,12 +43,18 @@
 #include "ngpc_hw.h"
 
 /* ── Configurable size ───────────────────────────────────────────────── */
+/* Set these with -D in the makefile (CDEFS += -DINV_SLOTS=8) so that
+ * ngpc_inventory.c sees the same value: a #define before the #include only
+ * changes the game's view of the struct -> memory corruption (fixed 2026-11-08). */
 #ifndef INV_SLOTS
-#define INV_SLOTS        16   /* inventory slots (max 255) */
+#define INV_SLOTS        16   /* inventory slots (max 254) */
 #endif
 
 #ifndef INV_EQUIP_SLOTS
 #define INV_EQUIP_SLOTS   4   /* equipment slots */
+#endif
+#if INV_SLOTS < 1 || INV_SLOTS > 254 || INV_EQUIP_SLOTS < 1 || INV_EQUIP_SLOTS > 255
+#error "INV_SLOTS 1..254 (0xFF = INV_NONE), INV_EQUIP_SLOTS 1..255"
 #endif
 
 /* ── Equipment slot indices ──────────────────────────────────────────── */
@@ -78,7 +84,8 @@ void ngpc_inv_init(NgpcInventory *inv);
  * Add `count` copies of item `id` (id != 0).
  * If the item is already present, increment its quantity.
  * If absent, find a free slot.
- * Returns 1 on success, 0 if inventory is full or id == 0.
+ * Returns 1 on success, 0 if inventory is full, id == 0, or the stack
+ * would exceed 255 (nothing is changed in that case).
  */
 u8 ngpc_inv_add(NgpcInventory *inv, u8 id, u8 count);
 

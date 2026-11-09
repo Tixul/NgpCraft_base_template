@@ -4,7 +4,7 @@
 /*
  * ngpc_platform -- Physique platformer 2D (gravité, saut, coyote time)
  * =====================================================================
- * 11 octets RAM par NgpcPlatform.
+ * 12 octets RAM par NgpcPlatform (11 de champs + 1 octet d'alignement).
  *
  * Fonctionnement :
  *   1. Appeler ngpc_platform_update() une fois par frame.
@@ -19,13 +19,17 @@
  * Jump buffer : si le joueur appuie sur saut juste avant d'atterrir,
  * le saut s'exécute automatiquement à l'atterrissage.
  *
- * Constantes surchargeables (définir avant l'include) :
- *   #define PLAT_GRAVITY         4    // 0.25 px/frame²
- *   #define PLAT_MAX_FALL       64    // 4.0 px/frame
- *   #define PLAT_JUMP_VEL      -56    // -3.5 px/frame (saut)
- *   #define PLAT_JUMP_CUT_VEL  -16    // -1.0 px/frame (variable height)
- *   #define PLAT_COYOTE_FRAMES   6
- *   #define PLAT_JUMP_BUF_FRAMES 8
+ * Constantes surchargeables — À PASSER EN OPTION DU COMPILATEUR (makefile),
+ * PAS par un #define avant l'include : ngpc_platform.c est compilé à part et
+ * ne verrait pas ce #define (la physique garderait les valeurs par défaut).
+ *   CDEFS += -DPLAT_GRAVITY=4          // 0.25 px/frame²
+ *   CDEFS += -DPLAT_MAX_FALL=64        // 4.0 px/frame
+ *   CDEFS += -DPLAT_JUMP_VEL=-56       // -3.5 px/frame (saut)
+ *   CDEFS += -DPLAT_JUMP_CUT_VEL=-16   // -1.0 px/frame (variable height)
+ *   CDEFS += -DPLAT_COYOTE_FRAMES=6    // 1..255
+ *   CDEFS += -DPLAT_JUMP_BUF_FRAMES=8  // 1..254 (saut exécuté si on atterrit
+ *                                      //  dans les N frames qui suivent l'appui)
+ * (corrigé campagne 2026-11-08 : la doc disait « définir avant l'include ».)
  *
  * Usage :
  *   Copier ngpc_platform/ dans src/
@@ -57,12 +61,18 @@
 #ifndef PLAT_JUMP_BUF_FRAMES
 #define PLAT_JUMP_BUF_FRAMES 8
 #endif
+#if (PLAT_JUMP_BUF_FRAMES) < 1 || (PLAT_JUMP_BUF_FRAMES) > 254
+#error "PLAT_JUMP_BUF_FRAMES : 1..254 (compteur u8, +1 interne)"
+#endif
+#if (PLAT_COYOTE_FRAMES) < 1 || (PLAT_COYOTE_FRAMES) > 255
+#error "PLAT_COYOTE_FRAMES : 1..255 (compteur u8)"
+#endif
 
 /* ── Flags ───────────────────────────────────────────────── */
 #define PLAT_ON_GROUND  0x01   /* au sol (posé par ngpc_platform_land) */
 #define PLAT_JUMPING    0x02   /* saut en cours (bouton tenu) */
 
-/* ── Struct (11 octets RAM) ──────────────────────────────── */
+/* ── Struct (12 octets RAM, 11 de champs) ──────────────────────────────── */
 typedef struct {
     FxVec2 pos;       /* position sous-pixel (x, y)     — 4 octets */
     FxVec2 vel;       /* vitesse instantanée (px/frame)  — 4 octets */

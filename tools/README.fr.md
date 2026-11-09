@@ -130,7 +130,7 @@ Formats de PNG supportés :
 ### `ngpc_compress.py`
 **Compresse des données binaires (tiles, maps) en RLE ou LZ77/LZSS.**
 
-La sortie correspond au décompresseur embarqué dans `src/ngpc_lz.c`.
+La sortie correspond au décompresseur embarqué dans `src/fx/ngpc_lz.c`.
 Génère un fichier `.c` avec un tableau `const u8`.
 
 ```sh
@@ -250,4 +250,13 @@ N'est pas destiné à être lancé directement. Utilisé en interne par les cibl
 
 Contient des scripts Lua à installer dans Aseprite pour contraindre les couleurs
 à la gamme RGB444 du NGPC et faciliter la création d'assets hardware-correct.
-Voir le README dans l'archive.
+L'archive contient `package.json` et trois scripts (pas de README) :
+
+- `snap_palette.lua` — arrondit chaque couleur à la couleur NGPC la plus proche
+  (canaux = multiples de 17 : 0, 17, ..., 255) ;
+- `validate_palette.lua` — liste les couleurs non NGPC ;
+- `export_c.lua` — affiche la palette en C (mots `0x0BGR` + `ngpc_gfx_set_palette`).
+
+Installation : renommer en `ngpc-aseprite-color-tools.aseprite-extension` puis double-clic,
+ou Aseprite > Édition > Préférences > Extensions > Ajouter. Le `.gpl` de
+`ngpc_palette_viewer.py` suit la même règle x17.

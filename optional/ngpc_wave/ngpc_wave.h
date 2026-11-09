@@ -10,7 +10,7 @@
  *
  * Depends on: ngpc_hw.h only
  *
- * RAM: 7 bytes per NgpcWaveSeq (ptr 2 + timer 2 + next/count/flags 3).
+ * RAM: 9 bytes per NgpcWaveSeq (ptr 4 + timer 2 + next/count/flags 3 ; sizeof 10 under cc900).
  *
  * Usage:
  *   Copy ngpc_wave/ into src/
@@ -33,18 +33,18 @@
  *   const NgpcWaveEntry *e = ngpc_wave_update(&seq);
  *   while (e) {
  *       spawn_enemy(e->type, e->x, e->y, e->data);
- *       e = ngpc_wave_update(&seq);    // handle simultaneous spawns
+ *       e = ngpc_wave_poll(&seq);      // simultaneous spawns: poll, do NOT call update again
  *   }
  *   if (ngpc_wave_done(&seq)) load_next_wave();
  *
  * Note: ngpc_wave_update() returns a pointer to the entry to spawn, or NULL
- * if nothing is due this frame. Call in a loop until NULL to handle
- * simultaneous spawns (same delay).
+ * if nothing is due this frame. For simultaneous spawns (same delay), loop on
+ * ngpc_wave_poll() until NULL: each extra update() call would advance the timer.
  */
 
 #include "ngpc_hw.h"
 
-/* ── Wave entry (5 bytes ROM) ────────────────────────────────────────── */
+/* ── Wave entry (6 bytes ROM: 4 x u8 + u16) ──────────────────────────── */
 typedef struct {
     u8  type;     /* entity type to spawn              */
     u8  x;        /* X position in pixels (or tiles)   */
@@ -57,10 +57,10 @@ typedef struct {
 #define WAVE_END      0xFFFFu
 #define WAVE_SENTINEL { 0, 0, 0, 0, WAVE_END }
 
-/* Number of entries excluding the sentinel */
+/* Number of entries INCLUDING the sentinel (pass WAVE_COUNT(arr) - 1 to start) */
 #define WAVE_COUNT(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-/* ── Sequencer (7 bytes RAM) ─────────────────────────────────────────── */
+/* ── Sequencer (9 bytes, sizeof 10 under cc900) ──────────────────────── */
 typedef struct {
     const NgpcWaveEntry *entries; /* ROM table                        */
     u16 timer;                   /* frames elapsed since wave start   */
@@ -90,9 +90,9 @@ void ngpc_wave_stop(NgpcWaveSeq *seq);
 /*
  * Update the sequencer -- call ONCE per frame.
  * Returns a pointer to the entry to spawn if a spawn is due,
- * NULL otherwise. Call in a loop until NULL to handle simultaneous
- * spawns (same delay).
- * Increments the internal timer only once per loop call.
+ * NULL otherwise. Advances the timer by 1 on every call (except the very first,
+ * which is frame 0): call it exactly once per frame, then loop on
+ * ngpc_wave_poll() for simultaneous spawns (same delay).
  */
 const NgpcWaveEntry *ngpc_wave_update(NgpcWaveSeq *seq);
 

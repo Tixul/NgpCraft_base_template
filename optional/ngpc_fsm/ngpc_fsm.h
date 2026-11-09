@@ -4,7 +4,7 @@
 /*
  * ngpc_fsm -- Machine d'états finis (Finite State Machine)
  * =========================================================
- * Suivi léger des transitions d'état. Header-only, 3 octets RAM.
+ * Suivi léger des transitions d'état. Header-only, 4 octets RAM (3 champs u8, arrondi à 4 par cc900).
  * Les états sont des u8 — définir ses propres constantes (enum ou #define).
  *
  * Usage:
@@ -37,7 +37,10 @@
 /* ── Type ───────────────────────────────────────────────── */
 typedef struct {
     u8 cur;       /* état courant */
-    u8 prev;      /* état précédent (avant la dernière transition) */
+    u8 prev;      /* état au début du frame (avant un goto de ce frame) ;
+                     ngpc_fsm_tick() le recopie depuis cur : ce n'est PAS
+                     l'état d'avant la dernière transition (doc corrigée
+                     campagne 2026-11-08) — le mémoriser soi-même si besoin. */
     u8 entered;   /* 1 le premier frame après une transition */
 } NgpcFsm;
 

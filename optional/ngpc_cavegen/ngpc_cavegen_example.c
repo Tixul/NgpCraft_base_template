@@ -151,11 +151,23 @@ static void dungeon_update(void)
 
     cur = s_dungeon.current_idx;
 
-    /* Déplacement joueur (simplifié, à remplacer par ta logique d'acteur) */
-    if (ngpc_pad_pressed & PAD_LEFT)  { if (s_player_x > 1u) s_player_x--; }
-    if (ngpc_pad_pressed & PAD_RIGHT) { if (s_player_x < 18u) s_player_x++; }
-    if (ngpc_pad_pressed & PAD_UP)    { if (s_player_y > 1u) s_player_y--; }
-    if (ngpc_pad_pressed & PAD_DOWN)  { if (s_player_y < 17u) s_player_y++; }
+    /* Déplacement joueur (simplifié, à remplacer par ta logique d'acteur).
+     * corrigé campagne 2026-11-08 : les bornes 1..18 / 1..17 rendaient les tests de
+     * bord (x==0/19, y==0/18) impossibles : on ne quittait jamais la salle. Le bord
+     * n'est atteignable que dans l'ouverture d'une porte existante. */
+    {
+        u8 ex = s_dungeon.cells[cur].exits;
+        u8 in_col = (u8)(s_player_x >= PROCGEN_DOOR_COL && s_player_x < PROCGEN_DOOR_COL + PROCGEN_DOOR_W);
+        u8 in_row = (u8)(s_player_y >= PROCGEN_DOOR_ROW && s_player_y < PROCGEN_DOOR_ROW + PROCGEN_DOOR_H);
+        u8 min_x = (u8)((in_row && (ex & PROCGEN_EXIT_W)) ? 0u : 1u);
+        u8 max_x = (u8)((in_row && (ex & PROCGEN_EXIT_E)) ? 19u : 18u);
+        u8 min_y = (u8)((in_col && (ex & PROCGEN_EXIT_N)) ? 0u : 1u);
+        u8 max_y = (u8)((in_col && (ex & PROCGEN_EXIT_S)) ? 18u : 17u);
+        if (ngpc_pad_pressed & PAD_LEFT)  { if (s_player_x > min_x) s_player_x--; }
+        if (ngpc_pad_pressed & PAD_RIGHT) { if (s_player_x < max_x) s_player_x++; }
+        if (ngpc_pad_pressed & PAD_UP)    { if (s_player_y > min_y) s_player_y--; }
+        if (ngpc_pad_pressed & PAD_DOWN)  { if (s_player_y < max_y) s_player_y++; }
+    }
 
     /* Afficher le joueur */
     ngpc_gfx_put_tile(GFX_SCR1, s_player_x, s_player_y, TILE_PLAYER, 0u);
@@ -179,10 +191,11 @@ static void dungeon_update(void)
                                     next_room,
                                     g_procgen_rooms,
                                     dungeon_load_room_cb,
-                                    dir,
+                                    (u8)(dir ^ 1u),
                                     0);
-            /* Repositionner le joueur à la porte d'entrée */
-            ngpc_procgen_spawn_pos(dir, &s_player_x, &s_player_y);
+            /* Repositionner le joueur à la porte d'entrée : on ARRIVE par le côté
+             * opposé au sens de marche (dir ^ 1) -- corrigé campagne 2026-11-08 */
+            ngpc_procgen_spawn_pos((u8)(dir ^ 1u), &s_player_x, &s_player_y);
         }
     }
 }
@@ -218,7 +231,7 @@ static void dungeon_draw_minimap(void)
             }
             row[x] = c;
         }
-        ngpc_text_print(GFX_SCR1, 0, (u8)(15u + y), 1u, row);
+        ngpc_text_print(GFX_SCR1, 0, 0u, (u8)(15u + y), row);  /* corrigé campagne 2026-11-08 : (pal, x, y) */
     }
 }
 
@@ -303,6 +316,15 @@ static void cave_update(void)
 
     new_px = s_cave_px;
     new_py = s_cave_py;
+
+    /* corrigé campagne 2026-11-08 : effacer l'ancienne tuile joueur (sinon traînée
+     * quand la caméra ne bouge pas, ex. près des bords de la cave). */
+    if (s_cave_px >= s_cam_x && s_cave_py >= s_cam_y &&
+        (u8)(s_cave_px - s_cam_x) < 20u && (u8)(s_cave_py - s_cam_y) < 19u) {
+        u8 t = s_view[(u16)(u8)(s_cave_py - s_cam_y) * 20u + (u8)(s_cave_px - s_cam_x)];
+        ngpc_gfx_put_tile(GFX_SCR1, (u8)(s_cave_px - s_cam_x), (u8)(s_cave_py - s_cam_y),
+                          s_cave_tiles[t < 6u ? t : 0u], 0u);
+    }
 
     if (ngpc_pad_pressed & PAD_LEFT)  { if (new_px > 0u)           new_px--; }
     if (ngpc_pad_pressed & PAD_RIGHT) { if (new_px < CAVEGEN_W-1u) new_px++; }

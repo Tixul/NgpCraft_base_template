@@ -25,33 +25,56 @@
 
 static const RChainSplit *s_splits;
 static u8 s_count;
-static volatile u8 s_idx; /* current split index (incremented by ISR) */
+static volatile u8 s_idx; /* (compat) index du prochain evenement */
+
+/* corrigé campagne 2026-11-08 : evenements precalcules par arm() pour que l'ISR soit
+ * courte (voir la note ci-dessous). Un evenement = un groupe de decoupes de meme ligne. */
+static u8 s_nev;
+static u8 s_ev_split[RCHAIN_MAX_SPLITS];  /* decoupe a appliquer (la derniere du groupe) */
+static u8 s_ev_treg[RCHAIN_MAX_SPLITS];   /* TREG0 vers l'evenement suivant              */
 
 /* ---- HBlank ISR ---- */
 
+/* corrigé campagne 2026-11-08 -- cause des decoupes mal placees (mesuree en emulation,
+ * trace des entrees d'ISR) :
+ *  1. L'impulsion TI0 (H-int) arrive UNE ligne en avance : la 1re de l'image au debut de
+ *     la ligne 198 (elle prepare la ligne 0), puis au debut de la ligne N pour la ligne
+ *     N+1. Depuis le VBlank, la valeur de la ligne L s'ecrit a la (L+1)-ieme impulsion :
+ *     1er TREG0 = L+1 (l'ancien code mettait L).
+ *  2. L'ancienne ISR arretait puis relancait Timer0 : une impulsion tombant pendant
+ *     l'arret est perdue (une ISR cc900 dure plusieurs centaines de cycles, une ligne
+ *     515) -> decoupes de lignes consecutives espacees de 2 lignes, et une decoupe en
+ *     ligne 0 (TREG0 = 1) re-declenchait aussitot l'IRQ suivante (decoupe 64 en ligne 1).
+ *     Le compteur repart de 0 a chaque concordance : il suffit d'ecrire le nouveau TREG0,
+ *     en PREMIER, sans arreter le timer.
+ *  3. Les decoupes de la ligne 0 sont ecrites par arm() directement (en VBlank).
+ *  4. Plusieurs decoupes sur la meme ligne : la derniere gagne (avant : TREG0 = 0 = 256). */
+/* ISR minimale (corrigé campagne 2026-11-08) : en emulation l'ISR C d'origine durait
+ * plus d'une ligne ; deux decoupes sur des lignes consecutives tombaient 1 ligne trop tard.
+ * Tout est precalcule par arm() : 4 octets de scroll par evenement + TREG0 suivant. */
+static u8 s_ev_regs[RCHAIN_MAX_SPLITS * 4u];
+static u8 * volatile s_ev_ptr;           /* registres du prochain evenement     */
+static const u8 * volatile s_treg_ptr;   /* TREG0 a ecrire a l'entree suivante  */
+static volatile u8 s_left;               /* evenements restants                 */
+
 static void __interrupt isr_rchain(void)
 {
-    u8 i = s_idx;
+    u8 *p;
 
-    /* Write scroll registers for the current split. */
-    HW_SCR1_OFS_X = s_splits[i].scr1x;
-    HW_SCR1_OFS_Y = s_splits[i].scr1y;
-    HW_SCR2_OFS_X = s_splits[i].scr2x;
-    HW_SCR2_OFS_Y = s_splits[i].scr2y;
-
-    i++;
-    s_idx = i;
-
-    if (i < s_count) {
-        /* Reprogram timer for the delta to the next split.
-         * Stop, set TREG0, restart so the counter reloads from 0. */
-        HW_TRUN  &= (u8)~0x01u;                                  /* stop  */
-        HW_TREG0  = (u8)(s_splits[i].line - s_splits[i - 1u].line);
-        HW_TRUN  |= 0x01u;                                        /* start */
-    } else {
-        /* All splits processed: stop timer until next VBlank. */
+    if (s_left == 0u) {                  /* IRQ en trop : rien a appliquer */
         HW_TRUN &= (u8)~0x01u;
+        return;
     }
+    HW_TREG0 = *s_treg_ptr;              /* tout de suite : le compteur repart de 0 */
+    p = s_ev_ptr;
+    HW_SCR1_OFS_X = p[0];
+    HW_SCR1_OFS_Y = p[1];
+    HW_SCR2_OFS_X = p[2];
+    HW_SCR2_OFS_Y = p[3];
+    s_ev_ptr   = p + 4;
+    s_treg_ptr = s_treg_ptr + 1;
+    if (--s_left == 0u) HW_TRUN &= (u8)~0x01u;      /* derniere : arret jusqu'au VBlank */
+    s_idx++;
 }
 
 /* ---- Public API ---- */
@@ -61,6 +84,8 @@ void ngpc_rchain_init(void)
     s_splits = 0;
     s_count  = 0;
     s_idx    = 0;
+    s_nev    = 0;
+    s_left   = 0;
 
     /* Enable the Timer0 IRQ once, via the BIOS. Writing the interrupt-level
      * registers directly does NOT arm the IRQ on NGPC hardware -- the BIOS owns
@@ -76,22 +101,61 @@ void ngpc_rchain_init(void)
 
 void ngpc_rchain_arm(const RChainSplit *splits, u8 count)
 {
+    u8 i, n, first;
+
     if (!splits || count == 0)
         return;
 
+    HW_TRUN &= (u8)~0x01u;    /* stop Timer0 only (corrigé campagne 2026-11-08 : ~0xC3
+                               * effacait aussi PRRUN et T1RUN -> plus de decoupe, son coupe) */
     s_splits = splits;
     s_count  = (count > RCHAIN_MAX_SPLITS) ? RCHAIN_MAX_SPLITS : count;
-    s_idx    = 0;
+
+    /* Groupes de meme ligne -> evenements. */
+    n = 0;
+    for (i = 0; i < s_count; i++) {
+        if (n > 0 && splits[s_ev_split[n - 1u]].line == splits[i].line) {
+            s_ev_split[n - 1u] = i;                       /* la derniere gagne */
+        } else {
+            s_ev_split[n] = i;
+            n++;
+        }
+    }
+    for (i = 0; (u8)(i + 1u) < n; i++)
+        s_ev_treg[i] = (u8)(splits[s_ev_split[i + 1u]].line - splits[s_ev_split[i]].line);
+    s_nev = n;
+
+    /* Ligne 0 : ecrite tout de suite (on est en VBlank). */
+    first = 0;
+    if (splits[s_ev_split[0]].line == 0u) {
+        i = s_ev_split[0];
+        HW_SCR1_OFS_X = splits[i].scr1x;
+        HW_SCR1_OFS_Y = splits[i].scr1y;
+        HW_SCR2_OFS_X = splits[i].scr2x;
+        HW_SCR2_OFS_Y = splits[i].scr2y;
+        first = 1;
+    }
+    s_idx = first;
+    if (first >= n) { s_left = 0u; return; }        /* rien d'autre : timer arrete */
+    for (i = first; i < n; i++) {
+        u8 k = s_ev_split[i];
+        s_ev_regs[(u8)(i * 4u)]      = splits[k].scr1x;
+        s_ev_regs[(u8)(i * 4u + 1u)] = splits[k].scr1y;
+        s_ev_regs[(u8)(i * 4u + 2u)] = splits[k].scr2x;
+        s_ev_regs[(u8)(i * 4u + 3u)] = splits[k].scr2y;
+    }
+    s_ev_treg[(u8)(n - 1u)] = 1u;                   /* inutilise (timer arrete apres) */
+    s_ev_ptr   = &s_ev_regs[(u8)(first * 4u)];
+    s_treg_ptr = &s_ev_treg[first];
+    s_left     = (u8)(n - first);
 
     /* Install ISR on Timer0 vector. */
     HW_INT_TIM0 = (IntHandler *)isr_rchain;
 
-    /* Configure Timer0 for HBlank clock.
-     * T01MOD bits 1-0 = 0b00: TI0 source (internal, same as ngpc_raster).
-     * TREG0 = first split's line number. */
-    HW_TRUN  &= (u8)~0xC3u; /* stop, clear clock source bits */
+    /* Timer0 sur TI0 (H-int), mode 8 bits. Valeur de la ligne L ecrite a la (L+1)-ieme
+     * impulsion depuis le VBlank (voir la note au-dessus de l'ISR). */
     HW_T01MOD &= (u8)~0xC3u;
-    HW_TREG0   = splits[0].line ? splits[0].line : 1u; /* 0 would fire immediately */
+    HW_TREG0   = (u8)(splits[s_ev_split[first]].line + 1u);
     HW_TRUN   |= 0x01u; /* start */
 }
 
@@ -102,4 +166,6 @@ void ngpc_rchain_disarm(void)
      * with the timer stopped, but a NULL pointer crash is not. */
     s_count = 0;
     s_idx   = 0;
+    s_nev   = 0;
+    s_left  = 0;
 }

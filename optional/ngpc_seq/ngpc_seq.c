@@ -31,7 +31,9 @@ static void seq_emit(u8 ch, u8 note, u8 attn)
 {
     if (ch < 3u) {
         u16 div = seq_note_to_div(note);
-        u8  vol = (note == 0u) ? 15u : attn;  /* silence = attn max */
+        /* campagne 2026-11-08 : note hors table (> NOTE_MAX_INDEX) = silence, au lieu d'un
+         * son très aigu au diviseur 1 avec le volume demandé. */
+        u8  vol = (note == 0u || note > NOTE_MAX_INDEX) ? 15u : attn;  /* silence = attn max */
         Sfx_PlayToneCh(ch, div, vol, 0u);
     } else {
         /* Canal bruit : note 1..7 = rate (bit rate T6W28), 0 = silence */

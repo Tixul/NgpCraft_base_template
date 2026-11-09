@@ -41,7 +41,7 @@
  *
  *   void game_frame(void) {
  *       NgpcRWaveSpawn s;
- *       while (ngpc_rwave_update(&rw, &s)) {
+ *       if (ngpc_rwave_update(&rw, &s)) {          // once per frame
  *           spawn_enemy(s.enemy_type, s.x, s.y,
  *                       s.vx * enemy_speed(s.enemy_type),
  *                       s.vy * enemy_speed(s.enemy_type));
@@ -66,7 +66,7 @@
 
 typedef struct {
     u8 min_count;        /* minimum enemies per wave in this tier */
-    u8 max_count;        /* maximum enemies per wave in this tier */
+    u8 max_count;        /* maximum enemies per wave (hard cap ; a 0..2 random bonus is added below it) */
     u8 wave_interval_fr; /* frames to wait before starting next wave */
 } NgpcRWaveTier;
 
@@ -169,9 +169,9 @@ void ngpc_rwave_resume(NgpcRWave *rw);
  * Returns 0 if nothing to spawn this frame.
  *
  * Spawns never come in bursts -- at most one per call -- so a simple `if`
- * test is enough; no draining loop needed. (A loop still works and is
- * harmless since subsequent calls within the same frame won't advance
- * the director state until the next frame tick anyway.)
+ * test is enough. Call it EXACTLY once per frame: every call advances the
+ * director's timers, so a `while` loop would make waves run faster.
+ * (doc corrected 2026-11-08: the former "loop is harmless" claim was false)
  */
 u8 ngpc_rwave_update(NgpcRWave *rw, NgpcRWaveSpawn *out);
 

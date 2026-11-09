@@ -5,13 +5,16 @@
  * ngpc_transition -- Screen transitions (fade, flash, instant)
  * =============================================================
  * Sequence: fade-out -> load -> fade-in.
- * Manages timing AND ngpc_palfx calls automatically.
+ * Manages timing AND the fade-out: the module itself darkens the 48 palettes
+ * (SCR1 + SCR2 + SPR, 16 each) one 4-bit step at a time, 15 steps spread over
+ * the OUT phase (corrigé campagne 2026-11-08 : avant, palfx recevait pal_id 0xFF
+ * = "palette 255", hors RAM palette, et rien ne s'assombrissait).
  *
  * Depends on:
  *   ngpc_room/ngpc_room.h    (timing -- copy into src/)
- *   src/fx/ngpc_palfx.h     (already in the base template)
+ *   src/fx/ngpc_palfx.h     (only for the GAME's fade-in, see below)
  *
- * RAM: sizeof(NgpcRoom) + 2 = 6 bytes per NgpcTransition.
+ * RAM: sizeof(NgpcRoom) + 3 = 7 bytes per NgpcTransition.
  *
  * Usage:
  *   Copy ngpc_transition/ and ngpc_room/ into src/
@@ -45,16 +48,18 @@
  *     if (r == TRANS_LOAD) {
  *         load_scene();
  *         ngpc_transition_loaded(&tr);
- *         ngpc_palfx_fade(GFX_SCR1, 0xFF, scene_pal, spd); // fade-in
+ *         // one palfx slot per palette (4 slots max), e.g. palette 0 of SCR1:
+ *         ngpc_palfx_fade(GFX_SCR1, 0, scene_pal, _TRANS_SPEED(24)); // fade-in
  *     }
  *
- *   TRANS_FLASH fires a white flash (ngpc_palfx_flash) before the LOAD.
+ *   TRANS_FLASH sets the 48 palettes to white at start(), then fades them to
+ *   black during OUT (same stepping as TRANS_FADE).
  *   TRANS_INSTANT skips the visual effect (useful for hard cuts).
  */
 
 #include "ngpc_hw.h"
 #include "../ngpc_room/ngpc_room.h"
-/* ngpc_palfx.h: included in ngpc_transition.c (must be in src/fx/) */
+/* No palfx slot is used by the module. */
 
 /* ── Transition types ──────────────────────────────────────────────── */
 #define TRANS_FADE    0   /* cross-fade to black              */
@@ -70,15 +75,17 @@
 #define TRANS_DONE  ROOM_DONE     /* complete (1 frame)            */
 
 /* ── Fade speed from phase_frames ──────────────────────────────────── */
-/* palfx speed = phase_frames / 4 (4 gray levels)                      */
-/* Clamped to [1..63] for safety.                                       */
-#define _TRANS_SPEED(pf)  ((u8)(((pf) < 4 ? 1 : (pf) > 252 ? 63 : (pf) / 4)))
+/* palfx speed so that a palfx fade (15 steps per 4-bit channel) fits in   */
+/* one phase: speed = phase_frames / 15, min 1 (corrigé campagne         */
+/* 2026-11-08 : /4 supposait 4 niveaux, un fondu de 24 im. en durait 85).  */
+#define _TRANS_SPEED(pf)  ((u8)(((pf) < 15 ? 1 : (pf) / 15)))
 
-/* ── Struct (6 bytes RAM) ───────────────────────────────────────────── */
+/* ── Struct (7 bytes RAM) ───────────────────────────────────────────── */
 typedef struct {
     NgpcRoom room;        /* timing state machine (4 bytes)          */
     u8 type;             /* TRANS_FADE / TRANS_FLASH / TRANS_INSTANT */
     u8 phase_frames;     /* duration of each phase                   */
+    u8 fade_step;        /* darkening steps already applied (0..15)  */
 } NgpcTransition;
 
 /* ── API ────────────────────────────────────────────────────────────── */
@@ -94,7 +101,8 @@ void ngpc_transition_init(NgpcTransition *tr, u8 phase_frames);
  * Start a transition.
  *   type: TRANS_FADE | TRANS_FLASH | TRANS_INSTANT
  * No effect if a transition is already in progress.
- * Automatically triggers the fade-out palfx effect.
+ * FADE: the 48 palettes are darkened by ngpc_transition_update() during OUT.
+ * FLASH: the 48 palettes turn white now, then darken the same way.
  */
 void ngpc_transition_start(NgpcTransition *tr, u8 type);
 

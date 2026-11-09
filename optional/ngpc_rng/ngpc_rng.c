@@ -10,11 +10,6 @@
 
 #include "ngpc_rng/ngpc_rng.h"
 
-/* ── Registre timer hardware NGPC ───────────────────────────────────────── */
-/* TVAL0 : valeur courante du Timer A (8 bits, s'incrémente ~chaque µs).    */
-/* Si l'adresse ne correspond pas à ton hardware, ajuster ici.              */
-#define NGPC_TVAL0  (*(volatile u8 *)0x006Du)
-
 /* ── Algorithme xorshift32 (interne) ───────────────────────────────────── */
 
 static u32 xorshift32(u32 x)
@@ -40,23 +35,8 @@ void ngpc_rng_init(NgpcRng *rng, u16 seed)
     rng->state = s;
 }
 
-void ngpc_rng_init_vbl(NgpcRng *rng)
-{
-    u32 s;
-    u8  t0, t1, t2;
-    /* Lire le compteur timer à trois instants légèrement différents.
-       Le timer avance pendant l'exécution des lectures → entropie. */
-    t0 = NGPC_TVAL0;
-    t1 = NGPC_TVAL0;
-    t2 = NGPC_TVAL0;
-    /* Combiner les trois lectures en u32 */
-    s = (u32)t0 | ((u32)t1 << 8) | ((u32)t2 << 16) | ((u32)(t0 ^ t2) << 24);
-    s ^= (u32)0x9E3779B9uL;
-    /* Garantir l'état non-nul (xorshift32 ne doit jamais démarrer à 0) */
-    if (s == 0u) s = 0xDEADBEEFuL;
-    s = xorshift32(s);
-    rng->state = s;
-}
+/* ngpc_rng_init_vbl : macro dans ngpc_rng.h (corrigé campagne 2026-11-08 :
+   l'ancienne version lisait ADMOD 0x006D, constant -> graine toujours identique). */
 
 /* ── Génération de nombres ──────────────────────────────────────────────── */
 
@@ -84,7 +64,10 @@ u8 ngpc_rng_chance(NgpcRng *rng, u8 pct)
 {
     if (pct == 0u)   return 0u;
     if (pct >= 100u) return 1u;
-    return (u8)((ngpc_rng_u8(rng) % 100u) < pct ? 1u : 0u);
+    /* corrigé campagne 2026-11-08 : u8 % 100 biaisait (restes 0..55 3 fois sur
+     * 256 -> chance(50) = 58,6 %). u8 * 100 / 256 : exact pour 25/50/75 %,
+     * biais <= 1/256 sinon. */
+    return (u8)(((u16)((u16)ngpc_rng_u8(rng) * 100u) >> 8) < pct ? 1u : 0u);
 }
 
 s8 ngpc_rng_signed(NgpcRng *rng, u8 range)

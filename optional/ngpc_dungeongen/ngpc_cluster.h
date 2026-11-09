@@ -93,6 +93,8 @@ void ngpc_cluster_enter(NgpcCluster *cl, u8 room_idx, u16 base_seed);
 
 /*
  * Avance vers le N-ieme enfant de la room courante (exit_child_idx = 0..n_children-1).
+ * Dans la salle de l'escalier (si l'escalier est pose) : prend l'escalier
+ * (took_stair = 1, quelle que soit la valeur de exit_child_idx).
  * Met a jour cl->current_room et rappelle ngpc_cluster_enter pour la nouvelle room.
  * Ne fait rien si exit_child_idx >= n_children[current].
  * base_seed : meme valeur que lors de l'appel initial a ngpc_cluster_enter.

@@ -164,7 +164,8 @@ void road_init(void)
 {
     slide = 0u;
     slide_frac = 0u;
-    road_page = 0u;
+    road_page = 1u;   /* corrigé campagne 2026-11-08 : tbl[0] is displayed
+                       * below, so the first road_frame() must build tbl[1] */
     road_y = 0u;
     steer = 0;
 
@@ -174,6 +175,7 @@ void road_init(void)
     /* Only SCR2 is sheared. SCR1 keeps a flat table (pass NULL) and carries
      * the HUD in front of the road. */
     ngpc_raster_set_scroll_table(GFX_SCR2, road_tbl[0], (const u8 *)0);
+    ngpc_gfx_scroll(GFX_SCR2, road_tbl[0][0], 0u);  /* line 0 (campagne 2026-11-08) */
 }
 
 /*
@@ -188,7 +190,18 @@ void road_init(void)
  */
 void road_frame(u8 speed, s8 aim)
 {
-    u8 *next;
+    u8 *shown;
+
+    /* corrigé campagne 2026-11-08 : every register write happens FIRST, while
+     * we are still in VBlank (call right after ngpc_vsync()). Writing the
+     * scroll / switching the table after road_build() landed mid-frame: the
+     * line being drawn at that moment took the raw X (one wrong line) and the
+     * lines above came from the old table (tear). One frame of latency: we
+     * show the table built by the PREVIOUS call, with its own road_y. Line 0
+     * gets no HBlank write, so it takes the VBlank X = the table's line 0. */
+    shown = road_tbl[road_page ^ 1u];
+    ngpc_raster_set_scroll_table(GFX_SCR2, shown, (const u8 *)0);
+    ngpc_gfx_scroll(GFX_SCR2, shown[0], road_y);
 
     steer = aim;
 
@@ -204,10 +217,7 @@ void road_frame(u8 speed, s8 aim)
      * that once the road art is longer than one map. */
     road_y = (u8)(road_y + (u8)(speed >> 3));
 
-    next = road_tbl[road_page];
-    road_build(next);
-    ngpc_raster_set_scroll_table(GFX_SCR2, next, (const u8 *)0);
-    ngpc_gfx_scroll(GFX_SCR2, 0u, road_y);
+    road_build(road_tbl[road_page]);   /* the buffer NOT on screen */
     road_page ^= 1u;                   /* ONE parity, for both regions */
 }
 

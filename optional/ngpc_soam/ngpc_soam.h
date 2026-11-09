@@ -13,6 +13,9 @@
  *   ngpc_sprmux  = true multiplexing via HBlank ISR, supports >64 sprites
  *   ngpc_soam    = clean double-buffer, max 64 sprites, zero ISR overhead
  *
+ * Once at startup (RAM is NOT zeroed at boot on real hardware):
+ *   ngpc_soam_init();                               // clears shadow + hides all
+ *
  * Usage per frame:
  *   ngpc_soam_begin();                              // start of game logic
  *   ngpc_soam_put(0, x, y, tile, SPR_FRONT, pal);  // fill slots 0..N-1
@@ -28,6 +31,11 @@
 
 #include "../../src/core/ngpc_types.h"
 #include "../../src/core/ngpc_hw.h"
+
+/* Clear both shadow buffers and hide all 64 hardware slots.
+ * Call ONCE before the first ngpc_soam_begin(): on the console the RAM holds
+ * garbage at boot, and flush() would push it as visible sprites. */
+void ngpc_soam_init(void);
 
 /* Begin a new frame: reset the slot cursor.
  * Call once per frame before any ngpc_soam_put() calls. */
@@ -63,7 +71,8 @@ void ngpc_soam_flush(void);
  * - MUST be called during VBlank (or just after) for tear-free updates. */
 void ngpc_soam_flush_partial(void);
 
-/* Hide all 64 hardware sprite slots immediately (direct HW write).
+/* Hide all 64 hardware sprite slots immediately (direct HW write), and the
+ * matching shadow slots, so the next flush() does not bring them back.
  * Safe to call at any time (e.g. during scene transitions). */
 void ngpc_soam_hide_all(void);
 

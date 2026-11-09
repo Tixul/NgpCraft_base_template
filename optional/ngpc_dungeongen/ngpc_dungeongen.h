@@ -14,22 +14,25 @@
  *
  * ---------------------------------------------------------------------------
  * Dependances: ngpc_gfx, ngpc_sprite, ngpc_rtc
- * Assets generes par les outils :
- *   GraphX/tiles_procgen.c/.h   (export_procgen_tiles.py)
- *   GraphX/sprites_lab.c/.h     (export_sprites_lab.py)
+ * Assets : par defaut, graphismes de remplacement livres dans
+ *   dungeongen_assets_default.h (le module compile et tourne seul).
+ *   Graphismes du jeu : CDEFS += -DDUNGEONGEN_GAME_ASSETS et fournir
+ *   "tiles_procgen.h" + "sprites_lab.h" avec les symboles listes dans
+ *   dungeongen_assets_default.h. (corrigé campagne 2026-11-08 : les outils
+ *   export_procgen_tiles.py / export_sprites_lab.py ne sont pas livres.)
  *
  * Installation :
  *   Copier optional/ngpc_dungeongen/ dans src/
  *   OBJS += $(OBJ_DIR)/src/ngpc_dungeongen/ngpc_dungeongen.rel
- *   OBJS += $(OBJ_DIR)/GraphX/tiles_procgen.rel
- *   OBJS += $(OBJ_DIR)/GraphX/sprites_lab.rel
+ *   OBJS += $(OBJ_DIR)/src/ngpc_dungeongen/ngpc_cluster.rel   (si clusters)
  *   #include "ngpc_dungeongen/ngpc_dungeongen.h"
  * ---------------------------------------------------------------------------
  *
  * Usage minimal :
  *
- *   ngpc_dungeongen_set_rtc_seed();    // seed session RTC (1 fois au boot)
- *   ngpc_dungeongen_init();            // charge assets VRAM + palettes
+ *   ngpc_dungeongen_init();            // assets VRAM + palettes, seed = 0
+ *   ngpc_dungeongen_set_rtc_seed();    // APRES init : seed session RTC
+ *                                      // (ou ngpc_dungeongen_set_seed(s))
  *   ngpc_dungeongen_enter(0u, 0xFFu); // room 0, style auto
  *   ngpc_dungeongen_spawn();           // ennemis + item en sprites
  *   // dans la boucle :
@@ -121,8 +124,10 @@
 #endif
 
 /* ---- Nombre minimum de sorties par salle (0=pas de contrainte) ---- */
+/* Defaut 1 (decision campagne 2026-11-08) : le style 0 "salle fermee" n'est plus
+ * tire (ni force : un style force sous le minimum passe au suivant). 0 = ancien comportement. */
 #ifndef DUNGEONGEN_MIN_EXITS
-#define DUNGEONGEN_MIN_EXITS         0u
+#define DUNGEONGEN_MIN_EXITS         1u
 #endif
 
 /* ---- Tiers de difficulte (DUNGEONGEN_TIER_COLS=0 = desactive) ---- */
@@ -255,14 +260,20 @@ extern NgpcDungeonRoom ngpc_dgroom;
 
 /*
  * Initialise la seed de session depuis le RTC.
- * Appeler une fois au boot avant ngpc_dungeongen_init().
+ * Appeler APRES ngpc_dungeongen_init() (init remet la seed a 0).
  * Sans cet appel : seed=0 (donjon identique a chaque run, utile en debug).
+ * (corrigé campagne 2026-11-08 : avant, a appeler AVANT init, et la seed n'etait
+ * jamais mise a 0 -> sur console, RAM non initialisee = seed aleatoire.)
  */
 void ngpc_dungeongen_set_rtc_seed(void);
+
+/* Seed de session explicite (ex. graine d'une partie sauvegardee). Apres init(). */
+void ngpc_dungeongen_set_seed(u16 seed);
 
 /*
  * Charge les assets graphiques en VRAM et configure les palettes.
  * Appeler une fois apres ngpc_init() et ngpc_gfx_scroll()/clear() initiaux.
+ * Remet la seed de session a 0 et le tier a 0.
  * Charge : tiles_procgen (terrain) + sprites_lab (entites).
  * Configure : PAL_TERRAIN, PAL_EAU sur GFX_SCR1 ; palettes sprites sur GFX_SPR.
  */
@@ -284,6 +295,13 @@ void ngpc_dungeongen_enter(u16 room_idx, u8 style_idx);
  * Utiliser pour cycler les styles avec le bouton A dans l'editeur.
  */
 u8 ngpc_dungeongen_n_styles(void);
+
+/* Masque DGN_EXIT_* d'un style (0..N_STYLES-1), sans rien dessiner. */
+u8 ngpc_dungeongen_style_exits(u8 style_idx);
+
+/* Style que ngpc_dungeongen_enter(room_idx, 0xFF) choisirait (sans dessiner).
+ * Peut etre le style 0 (salle fermee) : voir DUNGEONGEN_MIN_EXITS. */
+u8 ngpc_dungeongen_auto_style(u16 room_idx);
 
 /*
  * Spawne les entites (ennemis + item) pour la salle courante.
@@ -308,6 +326,8 @@ void ngpc_dungeongen_sync_sprites(u8 cam_x, u8 cam_y);
  *
  * Retourne DGNCOL_PASS | DGNCOL_SOLID | DGNCOL_WATER | DGNCOL_VOID | DGNCOL_TRIGGER.
  *
+ * Les ennemis, l'objet et l'escalier ne sont jamais poses sur la fosse ni sur
+ * un tonneau (corrigé campagne 2026-11-08).
  * Note : la detection des fosses (VIDE/VIDE_BORD) n'est pas incluse dans
  * cette version (necessite stockage de leur position en RAM). Le game code
  * peut complementer avec une verification tile si besoin.

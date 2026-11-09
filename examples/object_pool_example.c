@@ -5,7 +5,11 @@
  * Copy/adapt it to your game module.
  */
 
-#include "../src/ngpc_types.h"
+/* corrigé campagne 2026-11-08 : ngpc_types.h lives in src/core/. */
+#include "../src/core/ngpc_types.h"
+
+/* Call bullet_pool_reset() once before the first alloc: static RAM is NOT
+ * zeroed at boot on real hardware (emulators zero it and hide the bug). */
 
 typedef struct Bullet {
     s16 x;

@@ -58,12 +58,21 @@ extern u8 ngpc_gv_flags[NGPC_GV_FLAG_COUNT];
 extern u8 ngpc_gv_vars[NGPC_GV_VAR_COUNT];
 
 /*
- * ngpc_gv_init() -- Apply default variable values from g_game_var_inits[].
- * Also zeroes all flags.
- * Call once at game start, or wire to the init_game_vars trigger action.
- * If ngpc_game_vars.h was not exported yet, all variables default to 0.
+ * ngpc_gv_init_from(inits) -- Zero all flags and set variables from inits[16]
+ * (NULL = all 0). The pointer is remembered for the init_game_vars action (74).
+ *
+ * ngpc_gv_init() -- convenience macro: if the generated header
+ * (GraphX/gen/ngpc_game_vars.h, guard NGPC_GAME_VARS_GEN_H, array g_game_var_inits)
+ * was included BEFORE this header, applies its values; otherwise all 0.
+ * Safest: #include the generated header, then call ngpc_gv_init_from(g_game_var_inits).
+ * (fixed 2026-11-08: the init values were never applied before)
  */
-void ngpc_gv_init(void);
+void ngpc_gv_init_from(const u8 *inits);
+#ifdef NGPC_GAME_VARS_GEN_H
+#define ngpc_gv_init()  ngpc_gv_init_from(g_game_var_inits)
+#else
+#define ngpc_gv_init()  ngpc_gv_init_from((const u8 *)0)
+#endif
 
 /* ---- Flags ------------------------------------------------------------ */
 

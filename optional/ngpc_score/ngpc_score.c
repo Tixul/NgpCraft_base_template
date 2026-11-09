@@ -41,16 +41,12 @@ u16 ngpc_score_get_hi(const NgpcScore *s)
 
 void ngpc_score_get_parts(const NgpcScore *s, u16 *hi_part, u16 *lo_part)
 {
-    /* Décompose en deux tranches de 4 chiffres décimaux (0..9999 chacune)
-     * pour l'affichage 8 chiffres sans division 32-bit.
-     * Approximation : on divise s->lo par 10000 avec une soustraction itérative.
-     * Pour un score max de 65535 × 65536 ≈ 4 milliards, on retourne
-     * hi_part = s->hi (0..65535 en ×10000) et lo_part = s->lo % 10000. */
-    u16 lo = s->lo;
-    /* lo % 10000 par soustraction */
-    while (lo >= 10000u) lo = (u16)(lo - 10000u);
-    *lo_part = lo;
-    *hi_part = s->hi;
+    /* corrigé campagne 2026-11-08 : découpe DÉCIMALE (avant : hi = bits 16-31, lo = lo % 10000,
+     * donc 12345 s'affichait 00002345). Score plafonné à 99 999 999 (8 chiffres). */
+    u32 v = ((u32)s->hi << 16) | (u32)s->lo;
+    if (v > 99999999UL) v = 99999999UL;
+    *hi_part = (u16)(v / 10000UL);
+    *lo_part = (u16)(v % 10000UL);
 }
 
 /* ── Table des meilleurs scores ──────────────────────────── */

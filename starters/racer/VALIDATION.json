@@ -1,7 +1,8 @@
 {
   "rom": "bin/raceengine.ngc",
-  "rom_bytes": 32588,
-  "rom_sha256": "601ed1446e4a0487a064d18f53c6afbfeabe25c9979d8070576978ec281f45f7",
+  "rom_bytes": 32620,
+  "rom_sha256": "a8e68835f9b1491691264116cd7c77f4021499bc0ab3ed6deef9c76489221ac0",
+  "previous_rom_sha256": "601ed1446e4a0487a064d18f53c6afbfeabe25c9979d8070576978ec281f45f7",
   "full_game_sha256": "a40e9e0ff658301b8fdcb7823f033553d900591e3dac13a19e259e2c420a9da3",
   "checks": [
     "direct race boot",
@@ -28,7 +29,9 @@
     "distance": 28140,
     "ticks": 11010
   },
-  "date": "2026-10-04",
+  "date": "2026-11-08",
+  "checks_date": "2026-10-04 (full list above, on the previous ROM)",
+  "rebuild_2026-11-08": "ROM rebuilt after the 2026-11-03 source fixes (src/core/ngpc_runtime_alias.asm: C9H_* bridges save XIX/XIY and pass stack arguments; src/fx/ngpc_dma.c) and the 2026-11-08 campaign fixes taken from the template (src/core/ngpc_timing.c: ngpc_cpu_speed saves XIX and selects bank 3 before loading B/C; src/core/ngpc_vramq.c: full-address VRAM range check). Re-checked on the native emulator with BIOS: build.py deterministic (two builds byte-identical), direct race boot, acceleration with automatic shifts (gear 4, 56 mph after 4 s), pause freezes the clock, A resumes, no hardware violation (watchdog/stack). The other checks of the list were not re-run.",
   "source_audit": "Single track, car, panorama and original first-track roadside graphics; private game modules and secret-code definitions absent",
   "course_revision": "Original first-track roadside projection and sprite-size ladder; base COMET physics restored; road-edge sampled at wheel height; six-unit bend easing restored",
   "pacing": "Original two-VBlank scheduling with bounded catch-up after a small rendering overrun",

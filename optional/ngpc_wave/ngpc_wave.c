@@ -1,5 +1,8 @@
 #include "ngpc_wave.h"
 
+/* Bit interne : la 1re update a eu lieu (le timer avance à partir de la 2e). */
+#define _WAVE_FLAG_STARTED 0x04
+
 void ngpc_wave_start(NgpcWaveSeq *seq,
                      const NgpcWaveEntry *entries, u8 count)
 {
@@ -49,21 +52,17 @@ const NgpcWaveEntry *ngpc_wave_update(NgpcWaveSeq *seq)
 
     if (!(seq->flags & WAVE_FLAG_ACTIVE)) return 0;
 
-    /* Avancer le timer UNE fois par frame (premier appel de la boucle)
-     * On distingue : si next == 0 ET timer == 0, c'est le premier frame,
-     * on ne fait pas d'incrément avant le premier poll. */
-    if (seq->next > 0 || seq->timer > 0) {
+    /* corrigé campagne 2026-11-08 : avant, le timer n'avançait que si next>0 || timer>0,
+     * donc une table dont la 1re entrée a un délai > 0 ne démarrait jamais.
+     * 1re update = image 0 (pas d'incrément), puis +1 par update. */
+    if (seq->flags & _WAVE_FLAG_STARTED) {
         if (seq->timer < 0xFFFFu) seq->timer++;
+    } else {
+        seq->flags |= _WAVE_FLAG_STARTED;
     }
 
     e = _wave_poll_internal(seq);
-    if (e) return e;
-
-    /* Premier frame (timer=0, next=0) : vérifier quand même */
-    if (seq->timer == 0 && seq->next == 0)
-        return _wave_poll_internal(seq);
-
-    return 0;
+    return e;
 }
 
 void ngpc_wave_tick(NgpcWaveSeq *seq)

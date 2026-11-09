@@ -21,6 +21,9 @@ u8 ngpc_inv_add(NgpcInventory *inv, u8 id, u8 count)
     /* Chercher si l'item existe déjà */
     for (i = 0; i < INV_SLOTS; i++) {
         if (inv->id[i] == id) {
+            /* corrigé campagne 2026-11-08 : refus si la pile dépasserait 255
+             * (avant : débordement u8 silencieux, 250 + 10 -> 4). */
+            if ((u16)inv->count[i] + count > 255u) return 0;
             inv->count[i] = (u8)(inv->count[i] + count);
             return 1;
         }

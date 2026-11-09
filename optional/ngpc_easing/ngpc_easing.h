@@ -63,8 +63,11 @@
 /* y = 3t² - 2t³  (dérivée nulle en t=0 et t=1, courbe en S).
  * Préféré à EASE_INOUT_QUAD pour les transitions de caméra
  * ou de palette — pente plus douce aux extremes. */
-#define EASE_SMOOTH(t)         ((fx16)(FX_MUL(INT_TO_FX(3), _EZ_SQ(t))        \
-                                     - FX_MUL(INT_TO_FX(2), _EZ_CB(t))))
+/* corrigé campagne 2026-11-08 : calcul en une passe s32 (t²·(3-2t)), arrondi
+ * vers le bas. L'ancienne version (3·t² - 2·t³ avec deux troncatures)
+ * n'était pas monotone : 12/16 -> 15, 13/16 -> 14, et 14/16 -> 16. */
+#define EASE_SMOOTH(t)         ((fx16)(((s32)(t) * (t) * (3 * FX_ONE - 2 * (t))) \
+                                       >> (2 * FX_SHIFT)))
 
 /* ── Lerp avec easing intégré ─────────────────────────── */
 

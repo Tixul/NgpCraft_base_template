@@ -38,8 +38,10 @@ typedef struct {
 /*
  * Résultat d'un test de collision complet.
  *
- * sides  : TOUS les côtés de A qui touchent B (peut avoir plusieurs bits).
- *          Ex: COL_BOTTOM|COL_RIGHT si le coin bas-droit de A est dans B.
+ * sides  : côté(s) de A en contact avec B, sur l'axe de pénétration minimale
+ *          (même axe que le push). 2 bits seulement si les pénétrations X et Y
+ *          sont égales (coin exact), ex. COL_BOTTOM|COL_RIGHT.
+ *          Au sol sur une plateforme large : COL_BOTTOM seul.
  *          Utiliser pour savoir "suis-je au sol ?", "contre un mur ?", etc.
  *
  * push_x : correction X à appliquer sur A pour sortir de B (0 si MTV sur Y).

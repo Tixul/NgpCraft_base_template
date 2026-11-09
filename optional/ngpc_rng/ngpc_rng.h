@@ -26,7 +26,7 @@
  *
  *   NgpcRng rng;
  *   ngpc_rng_init(&rng, 0x1234);          // fixed seed -> same dungeon
- *   ngpc_rng_init_vbl(&rng);              // hardware timer seed -> random
+ *   ngpc_rng_init_vbl(&rng);              // frame-counter seed (after PRESS START)
  *
  *   u8 d6    = ngpc_rng_range(&rng, 1, 6); // six-sided die [1..6]
  *   if (ngpc_rng_chance(&rng, 25)) { }     // 25% chance
@@ -52,11 +52,20 @@ typedef struct {
 void ngpc_rng_init(NgpcRng *rng, u16 seed);
 
 /*
- * Initialize the RNG from the NGPC hardware timer counter (TVAL0, 0x006D).
- * Non-reproducible -- use for non-deterministic gameplay.
- * Prefer calling after a few frames (timer is more entropic).
+ * Initialize the RNG from the VBlank frame counter (g_vb_counter, 60 Hz).
+ * Non-reproducible ONLY if called after a wait whose length depends on the
+ * player (e.g. "PRESS START" on the title screen); right after boot the
+ * counter always has the same value. 256 possible seeds. For more entropy,
+ * count frames yourself in the title loop (u16) and call ngpc_rng_init().
+ *
+ * corrigé campagne 2026-11-08 : read 0x006D, which is ADMOD (A/D converter
+ * mode register, constant 0x80), not a timer (TLCS-900/H timer counters are
+ * not readable) -> same seed every time. Now a macro: only code that calls
+ * it needs g_vb_counter (core ngpc_sys.c).
  */
-void ngpc_rng_init_vbl(NgpcRng *rng);
+#include "ngpc_sys.h"   /* g_vb_counter */
+#define ngpc_rng_init_vbl(rng) \
+    ngpc_rng_init((rng), (u16)(((u16)g_vb_counter << 8) | (u8)(g_vb_counter ^ 0xA5u)))
 
 /* ── Number generation ───────────────────────────────────────────────── */
 

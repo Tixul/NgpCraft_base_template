@@ -634,7 +634,8 @@ def main() -> int:
     p.add_argument(
         "--emit-u8-tiles",
         action="store_true",
-        help="Also emit raw 16-byte-per-tile array (<name>_tiles_u8) and tile count",
+        help="Emit a raw 16-byte-per-tile array (<name>_tiles_u8) and tile count "
+             "INSTEAD of <name>_tiles/<name>_tiles_count (load with ngpc_gfx_load_tiles_u8_at)",
     )
     p.add_argument(
         "--black-is-transparent",

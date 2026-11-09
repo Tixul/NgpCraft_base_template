@@ -12,6 +12,17 @@ static const fx16 _burst_vy[8] = {
       0,   0,  16, -16,   11,  11, -11, -11
 };
 
+/* corrigé campagne 2026-11-08 : FX_MUL arrondit vers -inf -> composantes négatives
+ * plus grandes d'1/16 (burst asymétrique). Valeur absolue puis signe. */
+static fx16 _part_mul_sym(fx16 v, fx16 k) {
+    if ((v < 0) != (k < 0)) {
+        if (v < 0) v = (fx16)-v; else k = (fx16)-k;
+        return (fx16)(-FX_MUL(v, k));
+    }
+    if (v < 0) { v = (fx16)-v; k = (fx16)-k; }
+    return FX_MUL(v, k);
+}
+
 void ngpc_particle_pool_init(NgpcParticlePool *pool) {
     u8 i;
     for (i = 0; i < PARTICLE_POOL_SIZE; i++) {
@@ -51,8 +62,8 @@ void ngpc_particle_burst(NgpcParticlePool *pool,
     fx16 vx, vy;
 
     for (i = 0; i < count; i++) {
-        vx = FX_MUL(speed, _burst_vx[i & 7]);
-        vy = FX_MUL(speed, _burst_vy[i & 7]);
+        vx = _part_mul_sym(speed, _burst_vx[i & 7]);
+        vy = _part_mul_sym(speed, _burst_vy[i & 7]);
         ngpc_particle_emit(pool, x, y, vx, vy, life, tile, pal, flags);
     }
 }

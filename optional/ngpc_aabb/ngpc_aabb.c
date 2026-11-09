@@ -53,6 +53,7 @@ u8 ngpc_rect_test(const NgpcRect *a, const NgpcRect *b, NgpcCollResult *out)
     s16 pen_right = RECT_RIGHT(a)  - b->x;          /* A droit  - B gauche */
     s16 pen_top   = RECT_BOTTOM(b) - a->y;          /* B bas    - A haut   */
     s16 pen_bot   = RECT_BOTTOM(a) - b->y;          /* A bas    - B haut   */
+    s16 min_x, min_y;   /* corrigé campagne 2026-11-08 : déclarations en tête (C89, cc900) */
 
     /* Pas d'overlap si une pénétration est <= 0 */
     if (pen_left <= 0 || pen_right <= 0 ||
@@ -60,16 +61,17 @@ u8 ngpc_rect_test(const NgpcRect *a, const NgpcRect *b, NgpcCollResult *out)
         return 0;
 
     /* MTV : axe à pénétration minimale */
-    s16 min_x = s16_min(pen_left, pen_right);
-    s16 min_y = s16_min(pen_top,  pen_bot);
+    min_x = s16_min(pen_left, pen_right);
+    min_y = s16_min(pen_top,  pen_bot);
 
     if (out) {
-        /* TOUS les côtés géométriquement touchés (peut être 2 bits) */
+        /* Côtés de contact = axe(s) de pénétration minimale (2 bits seulement
+         * si les pénétrations X et Y sont égales : coin exact).
+         * corrigé campagne 2026-11-08 : un bit X et un bit Y étaient TOUJOURS posés
+         * (au sol -> COL_BOTTOM|COL_RIGHT, "contre un mur" faux). */
         out->sides = COL_NONE;
-        if (pen_left  < pen_right)  out->sides |= COL_LEFT;
-        if (pen_right <= pen_left)  out->sides |= COL_RIGHT;
-        if (pen_top   < pen_bot)    out->sides |= COL_TOP;
-        if (pen_bot   <= pen_top)   out->sides |= COL_BOTTOM;
+        if (min_x <= min_y) out->sides |= (pen_left < pen_right) ? COL_LEFT : COL_RIGHT;
+        if (min_y <= min_x) out->sides |= (pen_top  < pen_bot)   ? COL_TOP  : COL_BOTTOM;
 
         /* Push MTV : résoudre sur l'axe à pénétration minimale.
          * push_x et push_y sont mutuellement exclusifs (un seul != 0). */
@@ -115,6 +117,17 @@ u8 ngpc_rect_test_many(const NgpcRect *moving,
 }
 
 /* ── Swept AABB ───────────────────────────────────── */
+
+/* t = d / v en fx16 (d en px, v en fx16), calculé en s32 puis saturé.
+ * corrigé campagne 2026-11-08 : FX_DIV(INT_TO_FX(d), v) débordait fx16
+ * (ex. d=250, v=1/16 -> t négatif -> faux impact). */
+static fx16 sw_t(s16 d, fx16 v)
+{
+    s32 t = ((s32)d << (FX_SHIFT + FX_SHIFT)) / (s32)v;
+    if (t >  0x7FFFL) t =  0x7FFFL;
+    if (t < -0x8000L) t = -0x8000L;
+    return (fx16)t;
+}
 /*
  * Algorithme : Minkowski sum + ray cast
  * On expande B par les dimensions de A, puis on teste un rayon
@@ -151,28 +164,29 @@ void ngpc_swept_aabb(const NgpcRect *a, fx16 vx, fx16 vy,
     /* Axe X */
     if (vx == 0) {
         /* Pas de mouvement horizontal : vérifier si déjà en overlap X */
-        if (ox < bx || ox >= bx + bw) return;
+        /* corrigé campagne 2026-11-08 : <= (bord commun = pas de chevauchement) */
+        if (ox <= bx || ox >= bx + bw) return;
         tx_entry = FX_MINVAL;
         tx_exit  = FX_MAXVAL;
     } else if (vx > 0) {
-        tx_entry = FX_DIV(INT_TO_FX(bx - ox),      vx);
-        tx_exit  = FX_DIV(INT_TO_FX(bx + bw - ox), vx);
+        tx_entry = sw_t(bx - ox,      vx);
+        tx_exit  = sw_t(bx + bw - ox, vx);
     } else {
-        tx_entry = FX_DIV(INT_TO_FX(bx + bw - ox), vx);
-        tx_exit  = FX_DIV(INT_TO_FX(bx - ox),      vx);
+        tx_entry = sw_t(bx + bw - ox, vx);
+        tx_exit  = sw_t(bx - ox,      vx);
     }
 
     /* Axe Y */
     if (vy == 0) {
-        if (oy < by || oy >= by + bh) return;
+        if (oy <= by || oy >= by + bh) return;
         ty_entry = FX_MINVAL;
         ty_exit  = FX_MAXVAL;
     } else if (vy > 0) {
-        ty_entry = FX_DIV(INT_TO_FX(by - oy),      vy);
-        ty_exit  = FX_DIV(INT_TO_FX(by + bh - oy), vy);
+        ty_entry = sw_t(by - oy,      vy);
+        ty_exit  = sw_t(by + bh - oy, vy);
     } else {
-        ty_entry = FX_DIV(INT_TO_FX(by + bh - oy), vy);
-        ty_exit  = FX_DIV(INT_TO_FX(by - oy),      vy);
+        ty_entry = sw_t(by + bh - oy, vy);
+        ty_exit  = sw_t(by - oy,      vy);
     }
 
     /* Intersection des intervalles */

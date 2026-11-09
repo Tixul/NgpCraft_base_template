@@ -3,7 +3,7 @@
 ngpc_compress.py - Tile data compression for NgpCraft_base_template
 
 Compresses binary data using RLE or LZ77/LZSS, matching the decompressor
-in src/ngpc_lz.c. Outputs a C source file with a const u8 array.
+in src/fx/ngpc_lz.c. Outputs a C source file with a const u8 array.
 
 Usage:
     python ngpc_compress.py <input> -o <output.c> [-m rle|lz77] [-n ARRAY_NAME]
@@ -107,7 +107,7 @@ def rle_decompress(data):
 #       bit = 1: match (2 bytes):
 #         Byte 0: (offset_high << 4) | (length - 3)
 #         Byte 1: offset_low
-#         offset = ((b0 >> 4) << 8) | b1   (12-bit, 1-4096)
+#         offset = ((b0 >> 4) << 8) | b1   (12-bit, 1-4095)
 #         length = (b0 & 0x0F) + 3         (3-18 bytes)
 #
 # Window size: 4096 bytes
@@ -121,7 +121,9 @@ def lz77_find_match(data, pos, window_size=4096, max_len=18, min_len=3):
     best_length = 0
     n = len(data)
 
-    start = max(0, pos - window_size)
+    # corrigé campagne 2026-11-08 : an offset of exactly 4096 does not fit in
+    # 12 bits (b0 overflowed -> ValueError); the decoder reaches 4095 at most.
+    start = max(0, pos - (window_size - 1))
 
     for j in range(start, pos):
         length = 0

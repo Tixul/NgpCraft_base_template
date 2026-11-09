@@ -67,10 +67,14 @@ static void pick_new_wave(NgpcRWave *rw)
     /* Enemy type : 1..type_count */
     etype = (u8)(1u + (rng_u8(rw) % rw->type_count));
 
-    /* Count : tier range + small extra jitter (0..2). */
+    /* Count : tier range + small extra jitter (0..2), total borné à max_count
+     * (décision campagne 2026-11-08 : max_count est un vrai maximum ; la gigue
+     * favorise seulement les grands effectifs sous ce plafond). */
     count = rng_range(rw, t->min_count, t->max_count);
     jitter_extra = (u8)(rng_u8(rw) % 3u);
-    count = (u8)(count + jitter_extra);
+    if ((u16)count + jitter_extra > t->max_count) count = t->max_count;
+    else count = (u8)(count + jitter_extra);
+    if (count == 0u) count = 1u;   /* corrigé campagne 2026-11-08 : min_count 0 -> wave_remaining-- sous-débordait */
 
     /* Safe band center, 16-px margin on both sides. */
     cx = (s16)(16u + (rng_u8(rw) % (u8)(rw->screen_w - 32u)));
@@ -92,7 +96,8 @@ static void pick_new_wave(NgpcRWave *rw)
     rw->wave_spawn_index  = 0u;
 
     rw->wave_count++;
-    rw->dir_wave_timer = t->wave_interval_fr;
+    /* corrigé campagne 2026-11-08 : dir_wave_timer n'est plus armé ici (il bloquait la vague
+     * en cours après son 1er ennemi) ; il l'est quand la vague est épuisée (update). */
 }
 
 static void fill_spawn(NgpcRWave *rw, NgpcRWaveSpawn *out)
@@ -242,14 +247,12 @@ u8 ngpc_rwave_update(NgpcRWave *rw, NgpcRWaveSpawn *out)
         return 0u;
     }
 
-    /* Waiting for next wave to start. */
-    if (rw->dir_wave_timer > 0u) {
-        rw->dir_wave_timer--;
-        return 0u;
-    }
-
-    /* Previous wave exhausted -> pick a new one. */
+    /* Previous wave exhausted -> wait wave_interval_fr, then pick a new one. */
     if (rw->wave_remaining == 0u) {
+        if (rw->dir_wave_timer > 0u) {
+            rw->dir_wave_timer--;
+            return 0u;
+        }
         pick_new_wave(rw);
         /* Fall through so the first enemy of the new wave can spawn now
          * (intra-wave timer starts at 0). */
@@ -264,6 +267,9 @@ u8 ngpc_rwave_update(NgpcRWave *rw, NgpcRWaveSpawn *out)
     fill_spawn(rw, out);
     rw->wave_spawn_index++;
     rw->wave_remaining--;
-    rw->wave_spawn_timer = rw->wave_interval;
+    /* interval-1 : un ennemi toutes les 'wave_interval' images exactement (avant : interval+1) */
+    rw->wave_spawn_timer = (u8)(rw->wave_interval - 1u);
+    if (rw->wave_remaining == 0u)
+        rw->dir_wave_timer = rw->tiers[rw->tier].wave_interval_fr;
     return 1u;
 }

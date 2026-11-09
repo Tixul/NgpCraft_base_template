@@ -262,7 +262,7 @@ _H_TEMPLATE = """\
  * Source : {src_name}
  *
  * Usage:
- *   #include "GraphX/{hdr_basename}"
+ *   #include "../GraphX/{hdr_basename}"   (from src/main.c)
  *   // In init, instead of ngpc_load_sysfont():
  *   {sym}_load();
  *   // ngpc_text_print() then works with the custom font.
@@ -271,7 +271,7 @@ _H_TEMPLATE = """\
 #define {guard}
 
 #include "ngpc_types.h"
-#include "../gfx/ngpc_gfx.h"
+#include "ngpc_gfx.h"
 
 /* VRAM tile slot for the first character (space, ASCII 32).
  * tile_slot = ascii_code  — identical mapping to the BIOS system font. */
@@ -307,7 +307,8 @@ def write_c(path: str, sym: str, src_name: str,
         ))
         for ti, words in enumerate(tiles):
             ascii_code = tile_base + ti
-            label = ASCII_CHARS[ti] if ti < len(ASCII_CHARS) else "?"
+            # label from the real code (tile_base may be 0 for 256x32 fonts)
+            label = chr(ascii_code) if 32 <= ascii_code < 127 else ("[DEL]" if ascii_code == 127 else "?")
             f.write(f"    /* [{ti:2d}] '{label}' (ASCII {ascii_code}) */\n")
             hex_words = ", ".join(f"0x{w:04X}" for w in words)
             f.write(f"    {hex_words},\n")
@@ -321,7 +322,8 @@ def write_h(path: str, sym: str, src_name: str,
     guard = f"NGPC_{sym.upper()}_H"
     if outline_applied:
         # Synthesized outline: C1=black outline, C2=white body
-        pal: list[tuple[int, int, int]] = [(0, 0, 0), (15, 15, 15), (0, 0, 0), (0, 0, 0)]
+        # (corrigé campagne 2026-11-08 : C1/C2 were swapped -> white outline, black body)
+        pal: list[tuple[int, int, int]] = [(0, 0, 0), (0, 0, 0), (15, 15, 15), (0, 0, 0)]
     else:
         # Palette: index 0 = transparent/bg (black), indices 1-3 from PNG (RGB888->RGB444)
         pal = [(0, 0, 0), (15, 15, 15), (0, 0, 0), (0, 0, 0)]
@@ -438,8 +440,10 @@ def main() -> None:
                         help="Output base path (without .c/.h extension)")
     parser.add_argument("-n", "--name", default=None,
                         help="C symbol prefix (default: derived from output basename)")
-    parser.add_argument("--tile-base", type=int, default=DEFAULT_TILE_BASE,
-                        help=f"VRAM tile slot for ASCII 32 / space (default: {DEFAULT_TILE_BASE})")
+    # corrigé campagne 2026-11-08 : default None so the per-layout default applies
+    # (256x32 -> 0); a fixed 32 here shifted every 256x32 glyph by 32 tiles.
+    parser.add_argument("--tile-base", type=int, default=None,
+                        help="VRAM tile slot of the first glyph (default: 32 for 128x48/256x24, 0 for 256x32)")
     outline_grp = parser.add_mutually_exclusive_group()
     outline_grp.add_argument("--outline", dest="outline", action="store_true", default=None,
                              help="Force outline generation (default: auto when 1 visible color)")

@@ -1,5 +1,8 @@
 /* Optional screen example; call after ngpc_init() from a stable menu.
- * Add build/obj/examples/qr_example.rel plus both QR module objects.
+ * Add build/obj/examples/qr_example.rel plus both QR module objects, and
+ * `CDEFS += -Ioptional/ngpc_qr` (cc900 resolves the nested "ngpc_qr.h" from
+ * the .c folder, see optional/ngpc_qr/README.md) -- campagne 2026-11-08. */
+/*
  * Caller MUST stop its raster/DMA and restore its own screen when we return.
  * No game-specific URL, record format, save or server is embedded here. */
 #include "../optional/ngpc_qr/ngpc_qr_draw.h"

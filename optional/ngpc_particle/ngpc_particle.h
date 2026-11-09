@@ -32,8 +32,10 @@
  *                       p->tile, p->pal, SPR_FRONT);
  *   }
  *
- * Taille du pool (surcharger avant l'include) :
- *   #define PARTICLE_POOL_SIZE 32
+ * Taille du pool / gravité : à régler par -D dans le makefile (vu par TOUS les .c) :
+ *   CDEFS += -DPARTICLE_POOL_SIZE=32 -DPARTICLE_GRAVITY=4
+ * PAS de #define avant l'include : ngpc_particle.c est compilé à part et garderait
+ * 16 → débordement mémoire (corrigé campagne 2026-11-08 : doc + garde #error).
  */
 
 #include "ngpc_fixed/ngpc_fixed.h"   /* fx16, FxVec2, FX_ADD, FX_MUL, FX_TO_INT */
@@ -42,8 +44,11 @@
 #ifndef PARTICLE_POOL_SIZE
 #define PARTICLE_POOL_SIZE  16
 #endif
+#if PARTICLE_POOL_SIZE < 1 || PARTICLE_POOL_SIZE > 255
+#error "PARTICLE_POOL_SIZE doit valoir 1..255 (index u8)"
+#endif
 
-/* ── Gravité particule (surcharger avant l'include) ──────── */
+/* ── Gravité particule (-D dans le makefile, voir plus haut) ── */
 #ifndef PARTICLE_GRAVITY
 #define PARTICLE_GRAVITY    ((fx16)2)   /* 0.125 px/frame² — légère */
 #endif

@@ -18,6 +18,14 @@ static const FxVec2 s_dirs[8] = {
     { (fx16) 11, (fx16) 11 },   /* 7: SE */
 };
 
+/* v * f arrondi vers 0 (symétrique en signe).
+ * corrigé campagne 2026-11-08 : FX_MUL arrondit vers -inf -> marche arrière
+ * bloquée à -15 et dérive latérale négative bloquée à -5 (jamais amorties). */
+static fx16 veh_damp(fx16 v, fx16 f)
+{
+    return (v < 0) ? (fx16)-FX_MUL((fx16)-v, f) : FX_MUL(v, f);
+}
+
 /* ── Helpers IA (static) ─────────────────────────────────────────────── */
 
 /* Convertit un vecteur (dx,dy) en direction 0-7 (même convention que s_dirs).
@@ -61,9 +69,14 @@ void ngpc_vehicle_steer(NgpcVehicle *v, s8 delta)
 
 void ngpc_vehicle_accel(NgpcVehicle *v, fx16 amount, fx16 max_speed)
 {
+    fx16 lo;
     v->speed = FX_ADD(v->speed, amount);
-    if (v->speed > max_speed)         v->speed = max_speed;
-    if (v->speed < FX_NEG(max_speed)) v->speed = FX_NEG(max_speed);
+    if (v->speed > max_speed) v->speed = max_speed;
+    /* corrigé campagne 2026-11-08 (choix de conception) : marche arrière bornée par
+     * VEH_SPEED_REVERSE (et jamais au-delà de -max_speed). */
+    lo = FX_NEG(max_speed);
+    if (lo < (fx16)VEH_SPEED_REVERSE) lo = (fx16)VEH_SPEED_REVERSE;
+    if (v->speed < lo) v->speed = lo;
 }
 
 void ngpc_vehicle_brake(NgpcVehicle *v, fx16 amount)
@@ -116,7 +129,7 @@ void ngpc_vehicle_update(NgpcVehicle *v, const NgpcTileCol *col,
     friction = (surface == (u8)VEH_TILE_GRAVEL)
                ? (fx16)VEH_FRICTION_GRAVEL
                : (fx16)VEH_FRICTION_TRACK;
-    v->speed = FX_MUL(v->speed, friction);
+    v->speed = veh_damp(v->speed, friction);
 
     /* Snap à zéro si sous le seuil sub-pixel (évite oscillation infinie) */
     if (v->speed > (fx16)-2 && v->speed < (fx16)2) v->speed = 0;
@@ -232,7 +245,8 @@ void ngpc_vehicle_steer_drift(NgpcVehicle *v, NgpcDriftState *d, s8 delta)
     transfer = (steps >= 2u) ? v->speed
                              : FX_MUL(v->speed, (fx16)11); /* sin(45°) ≈ 11/16 */
 
-    /* Direction du transfert : CW (delta>0) → rightward, CCW → leftward */
+    /* Direction du transfert : delta>0 (virage à gauche) → vers la droite,
+     * delta<0 (virage à droite) → vers la gauche : toujours l'extérieur du virage. */
     if (delta > 0) {
         d->vel_lat.x = FX_ADD(d->vel_lat.x, FX_MUL(right.x, transfer));
         d->vel_lat.y = FX_ADD(d->vel_lat.y, FX_MUL(right.y, transfer));
@@ -289,11 +303,11 @@ void ngpc_vehicle_update_drift(NgpcVehicle *v, NgpcDriftState *d,
     friction = (surface == (u8)VEH_TILE_GRAVEL)
                ? (fx16)VEH_FRICTION_GRAVEL
                : (fx16)VEH_FRICTION_TRACK;
-    v->speed = FX_MUL(v->speed, friction);
+    v->speed = veh_damp(v->speed, friction);
 
     /* ── 5. Friction latérale (grip) ── */
-    d->vel_lat.x = FX_MUL(d->vel_lat.x, grip);
-    d->vel_lat.y = FX_MUL(d->vel_lat.y, grip);
+    d->vel_lat.x = veh_damp(d->vel_lat.x, grip);
+    d->vel_lat.y = veh_damp(d->vel_lat.y, grip);
 
     /* Snap à zéro si sous le seuil sub-pixel */
     if (v->speed > (fx16)-2 && v->speed < (fx16)2) v->speed = 0;

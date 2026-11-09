@@ -18,9 +18,18 @@
 
 #include "ngpc_dungeongen/ngpc_dungeongen.h"
 
-/* Assets graphiques generes par les scripts export_*.py */
+/* Assets graphiques.
+ * corrigé campagne 2026-11-08 : "tiles_procgen.h"/"sprites_lab.h" viennent d'outils
+ * (export_procgen_tiles.py, export_sprites_lab.py) absents du template -> le module ne
+ * compilait pas. Par defaut : graphismes de remplacement livres avec le module.
+ * Jeu : -DDUNGEONGEN_GAME_ASSETS + ses propres en-tetes (symboles listes dans
+ * dungeongen_assets_default.h). */
+#ifdef DUNGEONGEN_GAME_ASSETS
 #include "tiles_procgen.h"    /* TILE_GROUND_1, PAL_TERRAIN, PAL_EAU, etc. */
 #include "sprites_lab.h"      /* SPR_ENE1_TILE, PAL_SPR_ENE1, etc.         */
+#else
+#include "dungeongen_assets_default.h"
+#endif
 
 /* HAL graphique + sprites */
 #include "ngpc_gfx.h"
@@ -163,6 +172,22 @@ static u8  s_item_wy;
 static u8  s_item_active;
 static u8  s_item_type;   /* index pool item (0 si pool non defini) */
 static u8  s_is_safe_room;
+
+/* corrigé campagne 2026-11-08 : positions de la fosse (bloc 2x2) et des tonneaux,
+ * pour que ennemis / objet / escalier ne soient pas poses dessus. 0xFF = absent. */
+static u8  s_vide_x;
+static u8  s_vide_y;
+static u8  s_tno_x[2];
+static u8  s_tno_y[2];
+
+static u8 _on_prop(u8 px, u8 py)
+{
+    if (s_vide_x != 0xFFu && px >= s_vide_x && px <= (u8)(s_vide_x + 1u) &&
+        py >= s_vide_y && py <= (u8)(s_vide_y + 1u)) return 1u;
+    if (s_tno_x[0] == px && s_tno_y[0] == py) return 1u;
+    if (s_tno_x[1] == px && s_tno_y[1] == py) return 1u;
+    return 0u;
+}
 
 /* Navigation cluster */
 static u8  s_has_stair;
@@ -437,7 +462,7 @@ static void _spawn_entities(void)
                 if (ok) { break; }
                 px = (u8)(1u + _rng_u8() % iw);
                 py = (u8)(1u + _rng_u8() % ih);
-                if (_on_exit(px, py, exits) == 0u) {
+                if (_on_exit(px, py, exits) == 0u && _on_prop(px, py) == 0u) {
                     ok = 1u;
                     if (s_has_water) {
                         if (s_water_orient == 0u && py == s_water_band) { ok = 0u; }
@@ -486,7 +511,7 @@ static void _spawn_entities(void)
             if (ok) { break; }
             px = (u8)(1u + _rng_u8() % iw);
             py = (u8)(1u + _rng_u8() % ih);
-            if (_on_exit(px, py, exits) == 0u) {
+            if (_on_exit(px, py, exits) == 0u && _on_prop(px, py) == 0u) {
                 ok = 1u;
                 if (s_has_water) {
                     if (s_water_orient == 0u && py == s_water_band) { ok = 0u; }
@@ -722,6 +747,8 @@ static void _draw_population(void)
     iw    = (u8)(s_room_w - 2u);
     ih    = (u8)(s_room_h - 2u);
     exits = s_styles[s_style_idx].exits;
+    s_vide_x = 0xFFu; s_vide_y = 0xFFu;
+    s_tno_x[0] = 0xFFu; s_tno_y[0] = 0xFFu; s_tno_x[1] = 0xFFu; s_tno_y[1] = 0xFFu;
 
 #if DUNGEONGEN_EAU_FREQ > 0
     if (s_has_water) {
@@ -777,6 +804,7 @@ static void _draw_population(void)
                 _put_cell((u8)(px+1u),   py,            TILE_VIDE_BORD, PAL_TERRAIN);
                 _put_cell(px,            (u8)(py+1u),   TILE_VIDE,      PAL_TERRAIN);
                 _put_cell((u8)(px+1u),   (u8)(py+1u),   TILE_VIDE,      PAL_TERRAIN);
+                s_vide_x = px; s_vide_y = py;
             }
         }
     }
@@ -795,7 +823,7 @@ static void _draw_population(void)
             else                 { px = (u8)(s_room_w - 2u); py = (u8)(1u + _rng_u8() % ih); }
             if (_on_exit(px, py, exits) == 0u) { ok = 1u; }
         }
-        if (ok) { _put_cell(px, py, TILE_TONNEAU, PAL_TERRAIN); }
+        if (ok) { _put_cell(px, py, TILE_TONNEAU, PAL_TERRAIN); s_tno_x[0] = px; s_tno_y[0] = py; }
 #if DUNGEONGEN_TONNEAU_MAX >= 2
         if (r >= 200u) {
             ok = 0u;
@@ -808,7 +836,7 @@ static void _draw_population(void)
                 else                 { px = (u8)(s_room_w - 2u); py = (u8)(1u + _rng_u8() % ih); }
                 if (_on_exit(px, py, exits) == 0u) { ok = 1u; }
             }
-            if (ok) { _put_cell(px, py, TILE_TONNEAU, PAL_TERRAIN); }
+            if (ok) { _put_cell(px, py, TILE_TONNEAU, PAL_TERRAIN); s_tno_x[1] = px; s_tno_y[1] = py; }
         }
 #endif
     }
@@ -913,8 +941,19 @@ void ngpc_dungeongen_set_rtc_seed(void)
                   ^ ((u16)t.day     << 1u));
 }
 
+void ngpc_dungeongen_set_seed(u16 seed)
+{
+    s_global_seed = seed;
+}
+
 void ngpc_dungeongen_init(void)
 {
+    /* corrigé campagne 2026-11-08 : RAM non mise a 0 au boot sur console. La seed RTC /
+     * set_seed s'appliquent donc APRES init (doc mise a jour). */
+    s_global_seed = 0u;
+#if DUNGEONGEN_TIER_COLS > 0
+    s_tier = 0u;   /* corrigé campagne 2026-11-08 : RAM non mise a 0 au boot sur console */
+#endif
     ngpc_gfx_load_tiles_at(TILES_PROCGEN, TILES_PROCGEN_COUNT, TILE_BASE);
     ngpc_gfx_load_tiles_at(SPRITES_LAB,  SPRITES_LAB_COUNT,  SPR_TILE_BASE);
 
@@ -934,6 +973,16 @@ void ngpc_dungeongen_init(void)
 u8 ngpc_dungeongen_n_styles(void)
 {
     return (u8)_N_STY;
+}
+
+u8 ngpc_dungeongen_style_exits(u8 style_idx)
+{
+    return s_styles[(u8)(style_idx % (u8)_N_STY)].exits;
+}
+
+u8 ngpc_dungeongen_auto_style(u16 room_idx)
+{
+    return _style_for(room_idx);
 }
 
 void ngpc_dungeongen_enter(u16 room_idx, u8 style_idx)
@@ -1033,13 +1082,19 @@ u8 ngpc_dungeongen_collision_at(u8 mx, u8 my)
     exits = s_styles[s_style_idx].exits;
 
     /* Bords exterieurs = mur, SAUF les ouvertures (exits) */
-    if (mx == 0u || mx == (u8)(s_room_w - 1u)) {
-        if (_de(my, exits)) { return DGNCOL_PASS; }  /* exit E/W */
-        return DGNCOL_SOLID;
+    /* corrigé campagne 2026-11-08 : chaque bord teste SA porte (avant : _de pour les
+     * deux bords verticaux, _dn||_ds pour les deux horizontaux -> murs O/S traversables). */
+    if (mx == 0u) {
+        return _dw(my, exits) ? DGNCOL_PASS : DGNCOL_SOLID;
     }
-    if (my == 0u || my == (u8)(s_room_h - 1u)) {
-        if (_dn(mx, exits) || _ds(mx, exits)) { return DGNCOL_PASS; }  /* exit N/S */
-        return DGNCOL_SOLID;
+    if (mx == (u8)(s_room_w - 1u)) {
+        return _de(my, exits) ? DGNCOL_PASS : DGNCOL_SOLID;
+    }
+    if (my == 0u) {
+        return _dn(mx, exits) ? DGNCOL_PASS : DGNCOL_SOLID;
+    }
+    if (my == (u8)(s_room_h - 1u)) {
+        return _ds(mx, exits) ? DGNCOL_PASS : DGNCOL_SOLID;
     }
 
     /* Bande d'eau */
@@ -1122,6 +1177,9 @@ void ngpc_dungeongen_set_room_type(u8 room_type, u8 avec_escalier)
             if (s_water_orient == 0u && my == s_water_band) { ok = 0u; }
             if (s_water_orient != 0u && mx == s_water_band) { ok = 0u; }
         }
+
+        /* Pas sur la fosse ni un tonneau (corrigé campagne 2026-11-08) */
+        if (_on_prop(mx, my)) { ok = 0u; }
 
         /* Pas sur un mur interieur */
         wi = 0u;

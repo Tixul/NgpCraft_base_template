@@ -45,7 +45,13 @@
 /* Vitesse maximale par défaut (px/frame en fx16).
  * Remplacer par la valeur souhaitée dans ngpc_vehicle_accel(). */
 #define VEH_SPEED_MAX       INT_TO_FX(4)        /* 4 px/frame            */
-#define VEH_SPEED_REVERSE   FX_LIT(-1.5f)       /* vitesse maxi arrière  */
+/* Vitesse maxi en marche arrière (négative) : borne basse appliquée par
+ * ngpc_vehicle_accel() (max(-max_speed, VEH_SPEED_REVERSE)). Un rebond sur mur
+ * peut la dépasser brièvement (la friction la ramène). Surchargeable dans le
+ * makefile : CDEFS += -DVEH_SPEED_REVERSE=-32 (fx16, 1/16 px). */
+#ifndef VEH_SPEED_REVERSE
+#define VEH_SPEED_REVERSE   FX_LIT(-1.5f)       /* -1.5 px/frame (= -24) */
+#endif
 
 /* Accélération boost strip appliquée chaque frame par dessus la vitesse */
 #define VEH_BOOST_DELTA     FX_LIT(0.125f)      /* +0.125 px/frame       */
@@ -105,14 +111,17 @@ void ngpc_vehicle_init(NgpcVehicle *v, s16 px, s16 py, u8 dir);
 
 /*
  * ngpc_vehicle_steer -- Tourne le véhicule de delta directions (±1).
- *   delta = +1 → rotation CW (vers la droite en vue top-down)
- *   delta = -1 → rotation CCW (vers la gauche)
+ *   delta = +1 → rotation anti-horaire (vers la GAUCHE en vue top-down, E→NE)
+ *   delta = -1 → rotation horaire (vers la DROITE, E→SE)
+ *   (corrigé campagne 2026-11-08 : la doc disait l'inverse ; les directions
+ *    sont numérotées dans le sens anti-horaire.)
  *   Enroule modulo 8.
  */
 void ngpc_vehicle_steer(NgpcVehicle *v, s8 delta);
 
 /*
- * ngpc_vehicle_accel -- Accélère de `amount` fx16, clampe à [-max_speed, max_speed].
+ * ngpc_vehicle_accel -- Accélère de `amount` fx16, clampe à
+ *   [max(-max_speed, VEH_SPEED_REVERSE), max_speed] (marche arrière limitée).
  *   Exemple : ngpc_vehicle_accel(&car, FX_LIT(0.25f), VEH_SPEED_MAX);
  */
 void ngpc_vehicle_accel(NgpcVehicle *v, fx16 amount, fx16 max_speed);

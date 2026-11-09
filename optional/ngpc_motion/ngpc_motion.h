@@ -97,7 +97,21 @@ void ngpc_motion_push(NgpcMotionBuf *buf, u8 pad_held, u8 pad_pressed);
 /* Teste un pattern unique contre le buffer.
  * Retourne 1 si le pattern est détecté, 0 sinon.
  * Algorithme : dernier step dans NGPC_MOTION_FINAL_WINDOW frames depuis head,
- * steps précédents trouvés en remontant (frames neutres ignorées). */
+ * steps précédents trouvés en remontant dans la fenêtre `window`.
+ *
+ * TOLÉRANCE VOULUE (style jeu de combat, décision campagne 2026-11-08) :
+ * entre deux steps, TOUTE frame qui ne correspond pas est sautée — pas
+ * seulement les neutres. Seuls comptent l'ORDRE des steps et la fenêtre.
+ * Exemple, pattern QCF+A { MDIR_D, MDIR_DR, MDIR_R|MBTN_A }, fenêtre 20 :
+ *   accepté : D, DR, R+A            (exact)
+ *   accepté : D, N, N, DR, N, R+A   (neutres entre les steps)
+ *   accepté : D, U, DR, L, R+A      (directions parasites : sautées)
+ *   accepté : D, D, D, DR, DR, R+A  (step tenu plusieurs frames)
+ *   refusé  : DR, D, R+A            (ordre faux)
+ *   refusé  : D, DR, R              (bouton manquant / seulement tenu)
+ *   refusé  : D ... 25 frames ... DR, R+A   (hors fenêtre de 20)
+ *   refusé  : D, DR, R+A, N, N, N, N  (R+A plus vieux que FINAL_WINDOW = 4)
+ * Pour un pattern strict, vérifier soi-même le buffer après détection. */
 u8 ngpc_motion_test(const NgpcMotionBuf *buf,
                     const NgpcMotionPattern NGP_FAR *pat);
 

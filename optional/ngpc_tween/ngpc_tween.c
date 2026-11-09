@@ -35,6 +35,9 @@ u8 ngpc_tween_update(NgpcTween *tw) {
 
     if (tw->flags & TWEEN_DONE) return 0;
 
+    /* corrigé campagne 2026-11-08 : avancer AVANT d'échantillonner -> l'update k donne t = k/N
+     * et la valeur 'to' est atteinte à la N-ième update (avant : N+1, 1re update sans effet). */
+    tw->tick++;
     if (tw->tick >= tw->duration) {
         /* Fin de phase — fixer la valeur finale */
         tw->value = tw->to;
@@ -59,7 +62,6 @@ u8 ngpc_tween_update(NgpcTween *tw) {
     t = _apply_ease(tw->ease, t);
 
     tw->value = FX_LERP(tw->from, tw->to, t);
-    tw->tick++;
     return 1;
 }
 

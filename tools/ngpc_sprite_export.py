@@ -491,6 +491,11 @@ def main() -> int:
             for i, c in enumerate(fixed):
                 if c not in idx_map:
                     idx_map[c] = i
+            # corrigé campagne 2026-11-08 : opaque black pixels are OPAQUE_BLACK
+            # internally; map them to the first 0x000 entry at index 1..3.
+            for i, c in enumerate(fixed):
+                if i > 0 and c == 0 and OPAQUE_BLACK not in idx_map:
+                    idx_map[OPAQUE_BLACK] = i
             palette_idx_maps = [idx_map]
             tile_pal_ids = [0 for _ in tile_colors]
             if args.pal_base + 1 > 16:

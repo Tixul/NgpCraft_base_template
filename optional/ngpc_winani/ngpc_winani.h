@@ -32,7 +32,9 @@
 
 #include "../../src/core/ngpc_types.h"
 
-/* Initialize: set window to full screen (no animation). */
+/* Initialize: set window to full screen (no animation).
+ * Call it ONCE before any other ngpc_win_* call: the module state is not
+ * zeroed at boot on real hardware (note campagne 2026-11-08). */
 void ngpc_win_init(void);
 
 /* Set to fully open immediately (no animation). */

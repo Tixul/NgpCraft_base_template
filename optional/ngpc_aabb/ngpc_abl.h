@@ -28,6 +28,10 @@
  *   #define ID_ENEMY_BASE 1   // enemies 1..5
  *   #define MASK_ENEMIES  0x3Eu  // bits 1-5
  *
+ * REQUIRED once at scene init (statics are NOT zeroed at boot on real
+ * hardware -- random active mask = ghost collisions):
+ *   ngpc_abl_clear();
+ *
  * Typical usage (frame loop):
  *   // 1. Update positions
  *   ngpc_abl_set(ID_PLAYER, px, py, 8, 8);
@@ -43,7 +47,9 @@
  *       if (ngpc_abl_hit(ID_ENEMY_BASE + i, ID_BULLET_BASE + i)) enemy_dead(i);
  */
 
-#include "ngpc_aabb.h"   /* NgpcRect, ngpc_rect_overlap */
+/* corrigé campagne 2026-11-08 : chemin depuis src/ (cc900 ne cherche pas dans
+ * le dossier du .h qui inclut -> "ngpc_aabb.h" introuvable depuis le jeu). */
+#include "ngpc_aabb/ngpc_aabb.h"   /* NgpcRect, ngpc_rect_overlap */
 
 #define NGPC_ABL_MAX 32u  /* valid IDs: 0..31 */
 

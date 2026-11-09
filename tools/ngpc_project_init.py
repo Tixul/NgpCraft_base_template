@@ -118,6 +118,16 @@ def main(argv: list[str]) -> int:
     cart_title = args.cart_title if args.cart_title is not None else derive_cart_title(proj_name)
     cart_title = derive_cart_title(cart_title)
 
+    # corrigé campagne 2026-11-08 : refuse a destination that is the template,
+    # one of its parents (--force would rmtree the template) or inside it
+    # (copytree would copy the new project into itself).
+    if (destination == template_root
+            or template_root.is_relative_to(destination)
+            or destination.is_relative_to(template_root)):
+        print("Error: destination must be outside the template folder "
+              "(%s)." % template_root, file=sys.stderr)
+        return 1
+
     if args.dry_run:
         print("[dry-run] template:   %s" % template_root)
         print("[dry-run] destination:%s" % destination)

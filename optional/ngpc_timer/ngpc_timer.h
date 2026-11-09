@@ -4,7 +4,7 @@
 /*
  * ngpc_timer -- Timers de jeu (countdown, cooldown, repeat)
  * ===========================================================
- * 3 octets RAM par NgpcTimer.
+ * 3 octets utiles par NgpcTimer (sizeof = 4 sous cc900, struct arrondie a pair).
  * Appeler ngpc_timer_update() une fois par frame pour chaque timer actif.
  *
  * Usage:
@@ -42,7 +42,8 @@ typedef struct {
  * Retourne immédiatement si frames == 0 avec flag DONE. */
 void ngpc_timer_start(NgpcTimer *t, u8 frames);
 
-/* Démarre un timer répétitif (se relance automatiquement toutes les 'period' frames). */
+/* Démarre un timer répétitif (se relance automatiquement toutes les 'period' frames).
+ * period == 0 est traité comme 1 (expire à chaque frame). */
 void ngpc_timer_start_repeat(NgpcTimer *t, u8 period);
 
 /* Stoppe le timer sans modifier la valeur restante. */

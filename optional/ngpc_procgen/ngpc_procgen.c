@@ -408,6 +408,14 @@ void ngpc_procgen_generate_ex(
     /* Injection de boucles APRES l'assignation initiale des templates */
     if (loop_pct > 0u) {
         inject_loops(map, &rng, templates, tpl_count, loop_pct);
+        /* corrigé campagne 2026-11-08 : la sortie etait choisie AVANT les boucles ; un
+         * raccourci pouvait la rapprocher (graine 0x1234 : distance 3 pour un max de 7).
+         * On la recalcule sur le donjon final (salle reellement la plus lointaine).
+         * Les donjons d'une graine (avec loop_pct > 0) changent donc par rapport a avant
+         * le 2026-11-08. */
+        map->cells[map->exit_idx].room_type = PROCGEN_ROOM_NORMAL;
+        map->exit_idx = find_exit_room(map);
+        map->cells[map->exit_idx].room_type = PROCGEN_ROOM_EXIT;
     }
 }
 
@@ -486,6 +494,12 @@ void ngpc_procgen_gen_content(
             }
             break;
         }
+
+        /* corrigé campagne 2026-11-08 : regle documentee "Room CLEARED -> count=0"
+         * (les tirages ci-dessus sont gardes : le contenu des autres salles ne change pas). */
+        if (map->cells[i].flags & PROCGEN_FLAG_CLEARED) {
+            content[i].count = 0u;
+        }
     }
 }
 
@@ -495,22 +509,31 @@ u8 ngpc_procgen_pick_template(
     const NgpcRoomTemplate NGP_FAR *templates,
     u8                             count)
 {
-    u8 candidates[PROCGEN_MAX_TEMPLATES];
+    /* corrigé campagne 2026-11-08 : l'ancien tableau candidates[PROCGEN_MAX_TEMPLATES=16]
+     * ne regardait que les 16 premiers templates : avec le pool de 48, 115 salles sur 192
+     * recevaient un template sans leurs sorties (toute salle avec sortie Est -> template 0).
+     * Deux passes sans tableau : compter, puis prendre le k-ieme compatible
+     * (meme tirage que l'ancien code quand count <= 16). */
     u8 n_cand;
     u8 i;
+    u8 k;
 
     if (count == 0u || templates == 0) return 0u;
 
     n_cand = 0u;
-    for (i = 0u; i < count && i < (u8)PROCGEN_MAX_TEMPLATES; i++) {
+    for (i = 0u; i < count; i++) {
         /* Compatible si le template supporte TOUS les exits requis */
-        if ((templates[i].exits_mask & exits_req) == exits_req) {
-            candidates[n_cand] = i;
-            n_cand++;
-        }
+        if ((templates[i].exits_mask & exits_req) == exits_req) n_cand++;
     }
 
     if (n_cand == 0u) return 0u; /* fallback : template 0 */
 
-    return candidates[ngpc_rng_u8(rng) % n_cand];
+    k = (u8)(ngpc_rng_u8(rng) % n_cand);
+    for (i = 0u; i < count; i++) {
+        if ((templates[i].exits_mask & exits_req) == exits_req) {
+            if (k == 0u) return i;
+            k--;
+        }
+    }
+    return 0u;
 }

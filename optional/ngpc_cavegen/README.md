@@ -45,6 +45,12 @@ PASS 3 — Connexité (flood-fill itératif)
 PASS 4 — Placement des entités
    Entrée  : premier CAVE_FLOOR dans le tiers gauche  (x < 11)
    Sortie  : premier CAVE_FLOOR dans le tiers droit   (x > 21)
+   Si l'une des deux est introuvable (la région gardée ne touche pas un des
+   tiers), la génération RECOMMENCE de façon déterministe : graine + k*0x9E37,
+   wall_pct - 2*k (k = 1..15). Même graine = même cave, et la cave rendue a
+   toujours une entrée et une sortie reliées (corrigé campagne 2026-11-08).
+   Coût : ~160 images (~2,7 s) PAR essai sur NGPC ; à 47 % un essai suffit
+   presque toujours, à 55-65 % il en faut souvent plusieurs.
    Ennemis + Coffres : 1 par section 8×8 (grille 4×4), distance min. entrée
 ```
 
@@ -57,7 +63,7 @@ PASS 4 — Placement des entités
 | 40 | Cave très ouverte, peu de murs, grandes salles |
 | **47** | **Recommandé — caverne naturelle équilibrée** |
 | 52 | Cave étroite, couloirs, nombreux cul-de-sac |
-| 55+ | Très peu de sol, passages rares |
+| 55+ | Très peu de sol, passages rares ; génération plus lente (essais répétés, voir PASS 4) |
 
 ---
 

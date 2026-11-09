@@ -10,6 +10,9 @@ void ngpc_timer_start(NgpcTimer *t, u8 frames) {
 }
 
 void ngpc_timer_start_repeat(NgpcTimer *t, u8 period) {
+    /* campagne 2026-11-08 : période 0 = 1 (tire à chaque image) — explicite au lieu
+     * d'un compteur à 0 qui ne décomptait pas. */
+    if (period == 0) period = 1;
     t->period = period;
     t->count  = period;
     t->flags  = TIMER_FLAG_ACTIVE | TIMER_FLAG_REPEAT;

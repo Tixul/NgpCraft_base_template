@@ -42,8 +42,9 @@ python tools/ngpc_tilemap.py scr1.png --scr2 scr2.png \
 ```
 
 **Notes importantes :**
-- `--emit-u8-tiles` : tiles en u8 (poids moitié en RAM, NGP_FAR toujours requis)
-- `tiles_count` = nombre de mots u16 (= nb_tiles × 8), **pas** le nombre de tiles
+- `--emit-u8-tiles` : tiles en u8 (meme taille en ROM que u16 : seul le type C change ; NGP_FAR toujours requis)
+- sans `--emit-u8-tiles` : `prefix_tiles[]` (u16) + `prefix_tiles_count` = nombre de mots u16 (= nb_tiles × 8), **pas** le nombre de tiles
+- avec `--emit-u8-tiles` : `prefix_tiles_u8[]` + `prefix_tile_count` = nombre de **tiles** → charger avec `ngpc_gfx_load_tiles_u8_at()` ; les macros `NGP_TILEMAP_BLIT_*` (§4) ne marchent PAS avec ce mode (corrigé campagne 2026-11-08)
 - `map_tiles[]` = indices 0..N dans le set unique (ajouter TILE_BASE à l'affichage)
 - `--no-dedupe` : désactive la déduplication (utile pour les écrans plein écran)
 
@@ -125,6 +126,9 @@ Ce que fait la macro :
 1. Copie les tiles vers Character RAM (VRAM) à `0xA000` (16 bytes par tile)
 2. Écrit la tilemap u16 directement dans `HW_SCR1_MAP` (0x9000)
 3. Charge les palettes via `ngpc_gfx_set_palette()`
+
+Attention : les macros lisent `prefix_tiles[]` / `prefix_tiles_count` (mode u16, SANS
+`--emit-u8-tiles`). Un actif généré avec `--emit-u8-tiles` ne compile pas avec elles.
 
 Fonctionne avec n'importe quel préfixe généré par `ngpc_tilemap.py` tant que
 les symboles suivent le contrat (`prefix_tiles`, `prefix_map_tiles`,
@@ -333,38 +337,25 @@ ngpc_tblit_hflip(GFX_SCR1, 16, 5, 4, 3, room1_door);
 
 ---
 
-## 10. HBlank: raster (CPU), MicroDMA, sprmux (beaucoup de sprites)
+## 10. HBlank: raster (CPU), MicroDMA
 
-Le NGPC a trois "familles" de trucs HBlank (scanline) utiles:
+Le NGPC a deux "familles" de trucs HBlank (scanline) utiles:
 
 - `ngpc_raster`: ISR CPU sur Timer0 (HBlank) -> modifie 1-2 registres par ligne.
 - `ngpc_dma_raster`: MicroDMA (pas d'ISR CPU) -> stream 152 bytes vers un registre a chaque HBlank.
-- `ngpc_sprmux`: multiplexage sprites -> reprogramme des slots sprites pendant HBlank.
+- Correspondance lignes (campagne 2026-11-08, emulation ; A CONFIRMER CONSOLE) : `table[N]` s'affiche
+  sur la ligne N, pour les deux modules. L'H-int vu avec RAS_V = N arrive au DEBUT de la ligne N et
+  prepare la ligne N+1 (celui de la ligne 0 arrive en ligne 198 ; pas d'H-int en ligne 151).
+  Rappels `ngpc_raster_set_callback` : appeles pendant la ligne L-1 via une table indexee par RAS_V ;
+  un rappel d'une ecriture ecrit ~360 cycles apres l'H-int (ligne = 515) -> effet sur SA ligne.
+  Budget du corps du rappel : ~150 cycles (~10 instructions courtes), sinon une ligne trop tard.
+- (`ngpc_sprmux` : module ABANDONNE, retire du template ; pour beaucoup de sprites voir `optional/ngpc_soam`.)
 
 ### Regle d'or: Timer0 est la ressource critique
 
 - Timer0 est connecte a HBlank.
 - MicroDMA utilise les requetes d'interruption comme "triggers": si un canal MicroDMA est arme sur `Timer0 (0x10)`, la requete Timer0 est consommee par le DMA (le CPU n'execute pas de code HBlank).
 - Donc `ngpc_raster` (CPU Timer0) et `ngpc_dma_raster` (MicroDMA Timer0) sont exclusifs.
-
-### Nouveau combo utile (base sur les patterns Pocket Tennis/Sonic)
-
-Tu peux faire tourner **MicroDMA (Timer0)** + **sprmux (Timer1)** dans le meme frame:
-
-- MicroDMA: `Timer0 (0x10)` comme start vector
-- sprmux: ISR CPU sur `Timer1`, clocke depuis `Timer0 overflow (TO0TRG)`
-
-Ca permet typiquement:
-- Parallax scroll (MicroDMA X-only sur SCR1 ou SCR2)
-- Beaucoup de sprites (sprmux) en meme temps
-
-Contraintes:
-- Timer1 ne doit pas etre utilise comme start vector MicroDMA (sinon l'ISR sprmux sur Timer1 ne tournera pas).
-- Pour eviter 2 ISRs par scanline, prefere ce mode avec MicroDMA actif sur Timer0.
-
-API:
-- `ngpc_sprmux_flush()` -> sprmux sur Timer0 (mode classique)
-- `ngpc_sprmux_flush_timer1()` -> sprmux sur Timer1 (mode "coexistence MicroDMA")
 
 ---
 

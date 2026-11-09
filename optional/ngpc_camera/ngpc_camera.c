@@ -5,7 +5,9 @@
 
 static void cam_clamp(NgpcCamera *cam)
 {
-    if (cam->flags & CAM_FLAG_CLAMP_X) {
+    /* corrigé campagne 2026-11-08 : level_w/h = 0 = infini (doc) -> pas de clamp
+     * (avant : caméra bloquée à 0). */
+    if ((cam->flags & CAM_FLAG_CLAMP_X) && cam->level_w != 0) {
         if (cam->level_w > CAM_SCR_W) {
             if (cam->x < 0)                          cam->x = 0;
             if (cam->x > cam->level_w - CAM_SCR_W)  cam->x = cam->level_w - CAM_SCR_W;
@@ -13,7 +15,7 @@ static void cam_clamp(NgpcCamera *cam)
             cam->x = 0;  /* niveau plus petit que l'écran : caméra fixe */
         }
     }
-    if (cam->flags & CAM_FLAG_CLAMP_Y) {
+    if ((cam->flags & CAM_FLAG_CLAMP_Y) && cam->level_h != 0) {
         if (cam->level_h > CAM_SCR_H) {
             if (cam->y < 0)                          cam->y = 0;
             if (cam->y > cam->level_h - CAM_SCR_H)  cam->y = cam->level_h - CAM_SCR_H;
@@ -47,6 +49,8 @@ void ngpc_cam_follow_smooth(NgpcCamera *cam, s16 tx, s16 ty, u8 speed)
     s16 target_y = ty - (s16)(CAM_SCR_H / 2);
     s16 dx = target_x - cam->x;
     s16 dy = target_y - cam->y;
+
+    if (speed == 0u) speed = 1u;   /* corrigé campagne 2026-11-08 : évite /0 */
 
     /* Division entière : décale d'une fraction du delta chaque frame.
      * speed=1 → quasi instantané, speed=8 → très progressif.
@@ -87,6 +91,9 @@ u8 ngpc_cam_on_screen(const NgpcCamera *cam, s16 wx, s16 wy, u8 margin)
 {
     s16 sx = wx - cam->x;
     s16 sy = wy - cam->y;
-    return sx >= -(s16)margin && sx < (s16)(CAM_SCR_W + margin) &&
-           sy >= -(s16)margin && sy < (s16)(CAM_SCR_H + margin);
+    /* corrigé campagne 2026-11-08 : marge convertie en s16 AVANT l'addition
+     * (cc900 calculait CAM_SCR_W + margin sur 8 bits : faux dès margin >= 96). */
+    s16 m  = (s16)margin;
+    return sx >= -m && sx < (s16)(CAM_SCR_W + m) &&
+           sy >= -m && sy < (s16)(CAM_SCR_H + m);
 }

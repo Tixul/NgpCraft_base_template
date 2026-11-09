@@ -62,7 +62,8 @@ typedef struct {
  * tile_x   : type du tile qui a causé la collision horizontale (0 si aucune)
  * tile_y   : type du tile qui a causé la collision verticale (0 si aucune)
  * in_ladder: 1 si le rect est à l'intérieur d'une zone TILE_LADDER
- * in_damage: 1 si le rect touche un tile TILE_DAMAGE
+ * in_damage: 1 si le rect touche un tile TILE_DAMAGE (indépendant de in_ladder :
+ *            les deux peuvent valoir 1)
  *
  * Usage typique après ngpc_tilecol_move() :
  *   if (res.sides & COL_BOTTOM) on_ground = 1;  // atterri
@@ -96,7 +97,9 @@ u8 ngpc_tilecol_is_solid(const NgpcTileCol *col, s16 tx, s16 ty);
  * TESTS DE ZONE
  * ══════════════════════════════════════════════════════ */
 
-/* 1 si un tile SOLID quelconque est dans la zone rect (wx,wy,rw,rh) */
+/* 1 si un tile SOLID quelconque est dans la zone rect (wx,wy,rw,rh).
+ * La partie hors de la map compte comme SOLID (sur les 4 bords) : un objet ne
+ * sort jamais de la map. Pour un « ciel ouvert », agrandir la map. */
 u8 ngpc_tilecol_rect_solid(const NgpcTileCol *col,
                             s16 wx, s16 wy, u8 rw, u8 rh);
 

@@ -46,7 +46,7 @@ typedef s16 fx16;   /* fixe-point 8.4 : les 4 bits bas = fraction */
 #define FX_FRAC(x)       ((x) & FX_MASK)
 
 /* Constante littérale flottante — compile-time uniquement ! */
-#define FX_LIT(f)        ((fx16)((f) * FX_ONE + 0.5f))
+#define FX_LIT(f)        ((fx16)((f) >= 0 ? (f) * FX_ONE + 0.5f : (f) * FX_ONE - 0.5f))
 
 /* ── Arithmétique ───────────────────────────────────── */
 
@@ -83,10 +83,18 @@ typedef s16 fx16;   /* fixe-point 8.4 : les 4 bits bas = fraction */
  * Ex: FxVec2 vel = { INT_TO_FX(2), FX_LIT(-0.5) }; */
 typedef struct { fx16 x, y; } FxVec2;
 
-#define FXVEC2(px, py)      ((FxVec2){ (fx16)(px), (fx16)(py) })
-#define FXVEC2_ZERO         ((FxVec2){ 0, 0 })
-#define FXVEC2_ADD(a, b)    ((FxVec2){ FX_ADD((a).x,(b).x), FX_ADD((a).y,(b).y) })
-#define FXVEC2_SCALE(v, f)  ((FxVec2){ FX_MUL((v).x,(f)),   FX_MUL((v).y,(f))   })
+/* Opérations vecteur = macros-INSTRUCTIONS avec destination explicite.
+ * (corrigé campagne 2026-11-08 : les anciennes FXVEC2/FXVEC2_ZERO/FXVEC2_ADD/
+ *  FXVEC2_SCALE étaient des littéraux composés C99 « (FxVec2){...} » que cc900
+ *  refuse : THC1-Error-216. Initialiser avec un agrégat C89 : FxVec2 v = {0, 0};)
+ * dst peut être a ou v lui-même (les deux composantes sont lues avant écriture
+ * composante par composante, sans dépendance croisée). */
+#define FXVEC2_SET(dst, px, py)   do { (dst).x = (fx16)(px); (dst).y = (fx16)(py); } while (0)
+#define FXVEC2_ZERO(dst)          FXVEC2_SET((dst), 0, 0)
+#define FXVEC2_ADD(dst, a, b)     do { (dst).x = FX_ADD((a).x, (b).x); \
+                                       (dst).y = FX_ADD((a).y, (b).y); } while (0)
+#define FXVEC2_SCALE(dst, v, f)   do { (dst).x = FX_MUL((v).x, (f)); \
+                                       (dst).y = FX_MUL((v).y, (f)); } while (0)
 
 /* ── Physique de base ───────────────────────────────── */
 /*

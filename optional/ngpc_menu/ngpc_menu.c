@@ -36,7 +36,8 @@ u8 ngpc_menu_update(NgpcMenu *m) {
         }
     }
 
-    if (ngpc_pad_pressed & PAD_A) {
+    /* corrigé campagne 2026-11-08 : menu vide -> MENU_NONE (pas d'index invalide) */
+    if ((ngpc_pad_pressed & PAD_A) && m->count > 0) {
         return m->cursor;
     }
 
@@ -50,8 +51,10 @@ void ngpc_menu_draw(const NgpcMenu *m, u8 plane, u8 tx, u8 ty, char cur_ch) {
 
     for (i = 0; i < m->count; i++) {
         prefix[0] = (i == m->cursor) ? cur_ch : ' ';
-        ngpc_text_print(plane, tx,     ty + i, prefix);
-        ngpc_text_print(plane, tx + 1, ty + i, m->items[i]);
+        /* corrigé campagne 2026-11-08 : ngpc_text_print prend (plane, pal, x, y, str) ;
+         * l'appel a 4 arguments passait un pointeur indefini (cc900 ne fait qu'avertir). */
+        ngpc_text_print(plane, 0, tx,     (u8)(ty + i), prefix);
+        ngpc_text_print(plane, 0, (u8)(tx + 1), (u8)(ty + i), m->items[i]);
     }
 }
 
@@ -60,6 +63,6 @@ void ngpc_menu_erase(const NgpcMenu *m, u8 plane, u8 tx, u8 ty, u8 width) {
     /* Utilise les 'width' premiers espaces de _blanks (max 20) */
     if (width > 20) width = 20;
     for (i = 0; i < m->count; i++) {
-        ngpc_text_print(plane, tx, ty + i, _blanks + (20 - width));
+        ngpc_text_print(plane, 0, tx, (u8)(ty + i), _blanks + (20 - width));  /* corrigé campagne 2026-11-08 */
     }
 }

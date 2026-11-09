@@ -65,6 +65,13 @@ void ngpc_hud_bar_set(NgpcHudBar *bar, u8 value)
 void ngpc_hud_score_draw(u8 plane, u8 pal, u8 tx, u8 ty,
                          u16 score, u8 digits, u8 zero_pad)
 {
+    /* corrigé campagne 2026-11-08 : ngpc_text_print_dec/num n'affichent rien au-dela de
+     * 5 chiffres ; on remplit les colonnes en trop a gauche puis on imprime 5 chiffres. */
+    while (digits > 5u) {
+        ngpc_gfx_put_tile(plane, tx, ty, (u16)(zero_pad ? '0' : ' '), pal);
+        tx++;
+        digits--;
+    }
     if (zero_pad)
         ngpc_text_print_dec(plane, pal, tx, ty, score, digits);
     else
@@ -82,7 +89,7 @@ void ngpc_hud_lives_draw(u8 spr_base, u8 x, u8 y,
         if (i < lives) {
             ngpc_sprite_set((u8)(spr_base + i),
                             (u8)(x + i * spacing), y,
-                            tile, pal, 0);
+                            tile, pal, SPR_FRONT);  /* corrigé campagne 2026-11-08 : 0 = priorité cachée */
         } else {
             ngpc_sprite_hide((u8)(spr_base + i));
         }

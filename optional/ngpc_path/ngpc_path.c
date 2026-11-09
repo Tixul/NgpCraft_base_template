@@ -10,7 +10,9 @@
  */
 
 #define _DIST_INF  0xFF
-#define _QUEUE_CAP 64
+/* corrigé campagne 2026-11-08 : file de 256 (chaque case n'y entre qu'une fois -> jamais pleine),
+ * plus de coupure à 63 pas, ré-init correcte d'une grille 16×16 (n = 256), voisins par index. */
+#define _QUEUE_CAP (PATH_MAX_W * PATH_MAX_H)
 
 /* Encode une position (x, y) en 1 octet : (y << 4) | x (x,y < 16) */
 #define _ENC(x, y)   ((u8)(((u8)(y) << 4) | (u8)(x)))
@@ -21,61 +23,51 @@
 static const s8 _dx[4] = { 0,  0, -1, 1 };
 static const s8 _dy[4] = {-1,  1,  0, 0 };
 
+/* File BFS statique (index u8 : rebouclage naturel à 256 = capacité). */
+static u8 s_queue[_QUEUE_CAP];
+/* Table de distances partagée par step / dist / build (aucune n'est réentrante). */
+static u8 s_dist[PATH_MAX_W * PATH_MAX_H];
+
+/* Visite le voisin d'index k / position (x, y) : distance nd s'il est libre et non vu. */
+#define _VISIT(k, x, y)     do { if (map[(k)] == 0 && dist_buf[(k)] == _DIST_INF) {         dist_buf[(k)] = nd; s_queue[qtail++] = _ENC((x), (y)); qsize++; } } while (0)
+
 /*
  * Effectue le BFS depuis (tx, ty).
- * Remplit dist_buf[256] avec les distances (0xFF si non-atteint).
+ * Remplit dist_buf[0..map_w*map_h-1] avec les distances (0xFF si non-atteint).
  */
 static void _bfs(const u8 *map, u8 map_w, u8 map_h,
                  u8 tx, u8 ty,
                  u8 *dist_buf)
 {
-    /* File circulaire */
-    u8 queue[_QUEUE_CAP];
-    u8 qhead = 0, qtail = 0, qsize = 0;
-    u8 i;
+    u8  qhead = 0, qtail = 0;
+    u16 qsize, k, ci;
     u16 n = (u16)map_w * map_h;
+    u8  cur, cx, cy, nd;
 
-    /* Init : tout à infini */
-    for (i = 0; i < (u8)n; i++) dist_buf[i] = _DIST_INF;
+    /* Init : tout à infini (u16 : n vaut 256 pour une grille 16×16) */
+    for (k = 0; k < n; k++) dist_buf[k] = _DIST_INF;
 
-    /* Cible = distance 0 */
+    if (map_w > PATH_MAX_W || map_h > PATH_MAX_H) return;
     if (tx >= map_w || ty >= map_h) return;
-    if (map[(u16)ty * map_w + tx] != 0) return; /* cible solide */
+    ci = (u16)ty * map_w + tx;
+    if (map[ci] != 0) return; /* cible solide */
 
-    dist_buf[(u16)ty * map_w + tx] = 0;
-    queue[qtail] = _ENC(tx, ty);
-    qtail = (u8)((qtail + 1) & (_QUEUE_CAP - 1));
+    dist_buf[ci] = 0;
+    s_queue[qtail++] = _ENC(tx, ty);
     qsize = 1;
 
     while (qsize > 0) {
-        u8 cur = queue[qhead];
-        u8 cx  = _DEC_X(cur);
-        u8 cy  = _DEC_Y(cur);
-        u8 cd  = dist_buf[(u16)cy * map_w + cx];
-
-        qhead = (u8)((qhead + 1) & (_QUEUE_CAP - 1));
+        cur = s_queue[qhead++];
         qsize--;
+        cx  = _DEC_X(cur);
+        cy  = _DEC_Y(cur);
+        ci  = (u16)cy * map_w + cx;
+        nd  = (u8)(dist_buf[ci] + 1u);
 
-        /* Limite de distance (queue pleine si on va trop loin) */
-        if (cd == (u8)(_QUEUE_CAP - 2)) continue;
-
-        for (i = 0; i < 4; i++) {
-            s8 nx = (s8)((s8)cx + _dx[i]);
-            s8 ny = (s8)((s8)cy + _dy[i]);
-            u16 idx;
-
-            if (nx < 0 || ny < 0 || (u8)nx >= map_w || (u8)ny >= map_h) continue;
-            idx = (u16)(u8)ny * map_w + (u8)nx;
-
-            if (map[idx] != 0) continue;             /* solide */
-            if (dist_buf[idx] != _DIST_INF) continue; /* déjà visité */
-            if (qsize >= _QUEUE_CAP) continue;        /* queue pleine */
-
-            dist_buf[idx] = (u8)(cd + 1);
-            queue[qtail]  = _ENC((u8)nx, (u8)ny);
-            qtail  = (u8)((qtail + 1) & (_QUEUE_CAP - 1));
-            qsize++;
-        }
+        if (cy > 0)                  { k = (u16)(ci - map_w); _VISIT(k, cx, cy - 1u); }
+        if ((u8)(cy + 1u) < map_h)   { k = (u16)(ci + map_w); _VISIT(k, cx, cy + 1u); }
+        if (cx > 0)                  { k = (u16)(ci - 1u);    _VISIT(k, cx - 1u, cy); }
+        if ((u8)(cx + 1u) < map_w)   { k = (u16)(ci + 1u);    _VISIT(k, cx + 1u, cy); }
     }
 }
 
@@ -83,9 +75,7 @@ u8 ngpc_path_step(const u8 *map, u8 map_w, u8 map_h,
                   u8 sx, u8 sy, u8 tx, u8 ty,
                   s8 *out_dx, s8 *out_dy)
 {
-    /* Buffers statiques — pas de stack overflow sur NGPC (pas de RTOS) */
-    static u8 dist[PATH_MAX_W * PATH_MAX_H];
-
+    u8 *dist = s_dist;   /* buffer statique partagé (pas de RTOS, pas de réentrance) */
     u8 i, best_dir;
     u8 best_dist;
 
@@ -93,6 +83,7 @@ u8 ngpc_path_step(const u8 *map, u8 map_w, u8 map_h,
     *out_dy = 0;
 
     if (sx == tx && sy == ty) return 0;  /* déjà arrivé */
+    if (sx >= map_w || sy >= map_h) return 0;  /* source hors grille */
 
     /* BFS depuis la cible */
     _bfs(map, map_w, map_h, tx, ty, dist);
@@ -131,11 +122,60 @@ u8 ngpc_path_step(const u8 *map, u8 map_w, u8 map_h,
 u8 ngpc_path_dist(const u8 *map, u8 map_w, u8 map_h,
                   u8 sx, u8 sy, u8 tx, u8 ty)
 {
-    static u8 dist[PATH_MAX_W * PATH_MAX_H];
-
     if (sx == tx && sy == ty) return 0;
+    if (sx >= map_w || sy >= map_h) return PATH_NO_PATH;
 
-    _bfs(map, map_w, map_h, tx, ty, dist);
+    _bfs(map, map_w, map_h, tx, ty, s_dist);
 
-    return dist[(u16)sy * map_w + sx];
+    return s_dist[(u16)sy * map_w + sx];
+}
+
+/* ── API « calculer une fois, suivre pas à pas » (ajout campagne 2026-11-08) ──
+ * Le chemin est stocké sur 2 bits par pas (0=haut 1=bas 2=gauche 3=droite, même
+ * ordre de préférence que ngpc_path_step) dans NgpcPath.steps. */
+
+u8 ngpc_path_build(NgpcPath *p, const u8 *map, u8 map_w, u8 map_h,
+                   u8 sx, u8 sy, u8 tx, u8 ty)
+{
+    u8 k, i, len, cx, cy;
+    u16 ci;
+
+    p->len = 0;
+    p->pos = 0;
+    if (sx == tx && sy == ty) return 0;
+    if (sx >= map_w || sy >= map_h) return PATH_NO_PATH;
+
+    _bfs(map, map_w, map_h, tx, ty, s_dist);
+    len = s_dist[(u16)sy * map_w + sx];
+    if (len == _DIST_INF) return PATH_NO_PATH;
+
+    /* Descente de gradient : chaque pas va vers un voisin à distance d-1. */
+    cx = sx; cy = sy;
+    for (k = 0; k < len; k++) {
+        ci = (u16)cy * map_w + cx;
+        for (i = 0; i < 4; i++) {
+            s8 nx = (s8)((s8)cx + _dx[i]);
+            s8 ny = (s8)((s8)cy + _dy[i]);
+            if (nx < 0 || ny < 0 || (u8)nx >= map_w || (u8)ny >= map_h) continue;
+            if (s_dist[(u16)(u8)ny * map_w + (u8)nx] == (u8)(s_dist[ci] - 1u)) break;
+        }
+        /* i < 4 garanti : toute case à distance d > 0 a un voisin à d-1 (propriété du BFS) */
+        p->steps[k >> 2] = (u8)((p->steps[k >> 2] & ~(3u << ((k & 3u) << 1)))
+                                | (u8)(i << ((k & 3u) << 1)));
+        cx = (u8)((s8)cx + _dx[i]);
+        cy = (u8)((s8)cy + _dy[i]);
+    }
+    p->len = len;
+    return len;
+}
+
+u8 ngpc_path_next(NgpcPath *p, s8 *out_dx, s8 *out_dy)
+{
+    u8 d;
+    if (p->pos >= p->len) { *out_dx = 0; *out_dy = 0; return 0; }
+    d = (u8)((p->steps[p->pos >> 2] >> ((p->pos & 3u) << 1)) & 3u);
+    p->pos++;
+    *out_dx = _dx[d];
+    *out_dy = _dy[d];
+    return 1;
 }

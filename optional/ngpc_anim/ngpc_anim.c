@@ -26,7 +26,8 @@ u8 ngpc_anim_update(NgpcAnim *a) {
     if (a->tick > 1) { a->tick--; return 0; }
     a->tick = a->def->speed;
 
-    if (a->def->flags & ANIM_PINGPONG) {
+    /* corrigé campagne 2026-11-08 : PINGPONG (0x03) contient le bit LOOP -> tester les 2 bits */
+    if ((a->def->flags & ANIM_PINGPONG) == ANIM_PINGPONG) {
         /* Mode ping-pong */
         if (!(a->flags & _ANIM_BACK)) {
             a->frame++;

@@ -30,9 +30,21 @@ u8 s_used_prev;
 
 /* ---- Public API ---- */
 
+void ngpc_soam_init(void)
+{
+    /* corrigé campagne 2026-11-08 : la RAM n'est pas mise a 0 au boot sur console ;
+     * sans init, flush() poussait des attributs quelconques (sprites parasites). */
+    u16 b;
+    for (b = 0u; b < (u16)SPR_MAX * 4u; b++) s_oam[b] = 0;
+    for (b = 0u; b < (u16)SPR_MAX; b++) s_col[b] = 0;
+    ngpc_soam_hide_all();
+}
+
 void ngpc_soam_begin(void)
 {
-    s_used_prev = s_used;
+    /* corrigé campagne 2026-11-08 : borne a SPR_MAX (s_used aleatoire au boot -> la
+     * boucle de queue de flush ecrivait au-dela de s_oam). */
+    s_used_prev = (s_used > (u8)SPR_MAX) ? (u8)SPR_MAX : s_used;
     s_used = 0;
 }
 
@@ -77,6 +89,7 @@ void ngpc_soam_hide_all(void)
     for (i = 0; i < SPR_MAX; i++) {
         *p = 0;
         p += 4;
+        s_oam[(u16)i * 4u + 1u] = 0;   /* corrigé campagne 2026-11-08 : cache aussi l'ombre */
     }
     s_used = 0;
     s_used_prev = 0;

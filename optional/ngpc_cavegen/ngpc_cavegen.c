@@ -308,6 +308,8 @@ void ngpc_cavegen_generate(
 {
     NgpcRng rng;
     u8 center_y;
+    u8 attempt;
+    u8 ok;
 
     out->seed        = seed;
     out->entry_x     = 0u;
@@ -317,40 +319,43 @@ void ngpc_cavegen_generate(
     out->enemy_count = 0u;
     out->chest_count = 0u;
 
-    ngpc_rng_init(&rng, seed);
-
     /* Clamp wall_pct */
     if (wall_pct > 65u) wall_pct = 65u;
     if (wall_pct < 35u) wall_pct = 35u;
 
-    /* ── Phase 1 : remplissage ── */
-    cave_init(out->map, &rng, wall_pct);
+    /* corrigé campagne 2026-11-08 : la generation pouvait echouer en silence (pas
+     * d'entree ou pas de sortie : entree laissee en (0,0) dans le mur de bordure ;
+     * 17/2000 graines a 47 %, 592/2000 a 55 %, 1614/2000 a 65 %). On recommence,
+     * de facon deterministe, avec une graine derivee et 2 % de murs en moins a
+     * chaque essai, jusqu'a obtenir une entree (x 1..10) ET une sortie (x 22..30). */
+    for (attempt = 0u; attempt < 16u; attempt++) {
+        ngpc_rng_init(&rng, (u16)(seed + (u16)((u16)attempt * 0x9E37u)));
 
-    /* ── Phase 2 : lissage ── */
-    cave_smooth(out->map);
+        /* ── Phase 1 : remplissage ── */
+        cave_init(out->map, &rng, wall_pct);
 
-    /* ── Phase 3 : connexité ── */
-    cave_remove_islands(out->map);
+        /* ── Phase 2 : lissage ── */
+        cave_smooth(out->map);
 
-    /* ── Phase 4a : entrée (colonne 1..7, côté gauche) ── */
-    center_y = (u8)(CAVE_H / 2u);
-    if (!cave_find_floor_col(out->map, 1u, 7u, center_y,
-                              &out->entry_x, &out->entry_y)) {
-        /* Fallback : chercher n'importe où à gauche */
-        cave_find_floor_col(out->map, 1u, (u8)(CAVE_W / 2u), center_y,
-                            &out->entry_x, &out->entry_y);
+        /* ── Phase 3 : connexité ── */
+        cave_remove_islands(out->map);
+
+        /* ── Phase 4a/4b : entrée (tiers gauche), sortie (tiers droit) ── */
+        center_y = (u8)(CAVE_H / 2u);
+        ok = cave_find_floor_col(out->map, 1u, 10u, center_y,
+                                 &out->entry_x, &out->entry_y);
+        if (ok) {
+            ok = cave_find_floor_col(out->map, (u8)(CAVE_W - 8u), (u8)(CAVE_W - 2u),
+                                     center_y, &out->exit_x, &out->exit_y);
+            if (!ok) {
+                ok = cave_find_floor_col(out->map, (u8)(CAVE_W - 10u), (u8)(CAVE_W - 9u),
+                                         center_y, &out->exit_x, &out->exit_y);
+            }
+        }
+        if (ok) break;
+        if (wall_pct > 37u) wall_pct = (u8)(wall_pct - 2u);
     }
     out->map[(u16)out->entry_y * CAVE_W + out->entry_x] = CAVE_ENTRY;
-
-    /* ── Phase 4b : sortie (colonne CAVE_W-8..CAVE_W-2, côté droit) ── */
-    if (!cave_find_floor_col(out->map,
-                              (u8)(CAVE_W - 8u), (u8)(CAVE_W - 2u), center_y,
-                              &out->exit_x, &out->exit_y)) {
-        /* Fallback : chercher n'importe où à droite */
-        cave_find_floor_col(out->map,
-                            (u8)(CAVE_W / 2u), (u8)(CAVE_W - 2u), center_y,
-                            &out->exit_x, &out->exit_y);
-    }
     out->map[(u16)out->exit_y * CAVE_W + out->exit_x] = CAVE_EXIT;
 
     /* ── Phase 4c : ennemis et coffres ── */
@@ -367,8 +372,10 @@ void ngpc_cavegen_viewport(
     u8 mx, my;
 
     /* Clamper la caméra dans les bornes de la carte */
-    if (cam_x + VIEW_W > CAVE_W) cam_x = (u8)(CAVE_W - VIEW_W);
-    if (cam_y + VIEW_H > CAVE_H) cam_y = (u8)(CAVE_H - VIEW_H);
+    /* corrigé campagne 2026-11-08 : "cam_x + VIEW_W" etait plie sur 8 bits par cc900
+     * (cam_x >= 236 -> pas de bornage, lecture hors de la carte). */
+    if (cam_x > (u8)(CAVE_W - VIEW_W)) cam_x = (u8)(CAVE_W - VIEW_W);
+    if (cam_y > (u8)(CAVE_H - VIEW_H)) cam_y = (u8)(CAVE_H - VIEW_H);
 
     for (vy = 0u; vy < VIEW_H; vy++) {
         my = (u8)(cam_y + vy);
@@ -386,6 +393,6 @@ void ngpc_cavegen_cam_center(u8 px, u8 py, u8 *cam_x, u8 *cam_y)
     *cam_y = (py >= VIEW_H / 2u) ? (u8)(py - VIEW_H / 2u) : 0u;
 
     /* Borner */
-    if (*cam_x + VIEW_W > CAVE_W) *cam_x = (u8)(CAVE_W - VIEW_W);
-    if (*cam_y + VIEW_H > CAVE_H) *cam_y = (u8)(CAVE_H - VIEW_H);
+    if (*cam_x > (u8)(CAVE_W - VIEW_W)) *cam_x = (u8)(CAVE_W - VIEW_W);  /* corrigé campagne 2026-11-08 */
+    if (*cam_y > (u8)(CAVE_H - VIEW_H)) *cam_y = (u8)(CAVE_H - VIEW_H);
 }

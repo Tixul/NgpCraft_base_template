@@ -21,7 +21,9 @@ python tools/ngpc_tilemap.py assets/title.png \
 Outputs:
 - `GraphX/level1_bg.c/.h` (tiles, map, palettes)
 - Optional `GraphX/level1_bg_tiles.bin` (raw tile words, little-endian)
-- Optional with `--emit-u8-tiles`: `<name>_tiles_u8[]` + `<name>_tile_count`
+- With `--emit-u8-tiles`: `<name>_tiles_u8[]` + `<name>_tile_count` INSTEAD of
+  `<name>_tiles[]`/`<name>_tiles_count`; load them with `ngpc_gfx_load_tiles_u8_at()`
+  (the `NGP_TILEMAP_LOAD_TILES_VRAM`/`BLIT` macros need `<name>_tiles[]`)
 
 ## 2. Compress tiles binary (optional)
 
@@ -36,7 +38,9 @@ Resulting runtime symbols:
 
 ## 3. Runtime loading
 
-See `examples/asset_pipeline_example.c`:
+See `examples/asset_pipeline_example.c` (it includes the generated
+`GraphX/level1_bg.h` and `GraphX/level1_bg_tiles_lz.h`; always include the
+generated headers rather than writing your own `extern`s):
 - Preferred: use `src/gfx/ngpc_tilemap_blit.h` macros (safe path, windjammer-style).
 - `example_bg_blit_scr1(...)` / `example_bg_blit_scr2(...)` for the safe path.
 - `example_bg_load_raw(...)` and `example_bg_load_lz(...)` show the classic helper path.
@@ -52,4 +56,7 @@ See `examples/asset_pipeline_example.c`:
 Notes:
 - Template policy: index `0` is transparency; max 3 visible colors per 8x8 tile.
 - Tilemap limits: max 32x32 cells and 512 unique tiles.
+- `ngpc_lz_to_tiles()` / `ngpc_rle_to_tiles()` decompress straight into tile
+  VRAM (no RAM buffer, no 128-tile limit): call them with the screen off or in
+  VBlank, like any VRAM write.
 - By default opaque black is preserved; use `--black-is-transparent` for legacy intro behavior.

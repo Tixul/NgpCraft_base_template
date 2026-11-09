@@ -58,7 +58,9 @@ void ngpc_platform_press_jump(NgpcPlatform *p) {
         p->flags   &= ~PLAT_ON_GROUND;
     } else {
         /* Stocker le saut pour l'atterrissage suivant */
-        p->jump_buf = PLAT_JUMP_BUF_FRAMES;
+        /* corrigé campagne 2026-11-08 : +1 car ngpc_platform_update() décompte
+         * avant le land() de la même frame (sinon fenêtre réelle = N-1 frames). */
+        p->jump_buf = (u8)(PLAT_JUMP_BUF_FRAMES + 1);
     }
 }
 

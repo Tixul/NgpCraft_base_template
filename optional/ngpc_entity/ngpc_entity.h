@@ -90,7 +90,9 @@
  *   │ tu ne caches PAS tout chaque frame, tu ne fais que déplacer les       │
  *   │ sprites vivants. Il faut alors cacher le slot au moment du kill.      │
  *   │ >> Active-la ainsi :                                                   │
- *   │     #define ENTITY_KILL_HOOK 1        // avant #include, ou -D makefile│
+ *   │     CDEFS += -DENTITY_KILL_HOOK=1   // makefile : vu par ngpc_entity.c │
+ *   │   (PAS de #define avant l'include : le .c, compilé à part, resterait   │
+ *   │    en discipline A et kill_all n'appellerait pas le hook)              │
  *   │   puis fournis le hook côté jeu (appelé automatiquement au kill) :     │
  *   │     void entity_on_kill(NgpcEntity *e) {                               │
  *   │         ngpc_sprite_hide(e->data[0]);  // data[0] = slot OAM de l'entité│
@@ -104,6 +106,11 @@
  */
 #ifndef ENTITY_KILL_HOOK
 #define ENTITY_KILL_HOOK  0   /* 0 = discipline A (clear-then-redraw), 1 = discipline B (hook) */
+#endif
+/* corrigé campagne 2026-11-08 : ENTITY_COUNT / ENTITY_DATA_SIZE / ENTITY_KILL_HOOK se règlent
+ * par -D dans le makefile (vus par ngpc_entity.c) ; bornes des index u8 vérifiées. */
+#if ENTITY_COUNT < 1 || ENTITY_COUNT > 255 || ENTITY_DATA_SIZE < 1 || ENTITY_DATA_SIZE > 255
+#error "ENTITY_COUNT et ENTITY_DATA_SIZE doivent valoir 1..255 (index u8)"
 #endif
 
 /* ── Struct entité (8 + ENTITY_DATA_SIZE octets) ────────── */

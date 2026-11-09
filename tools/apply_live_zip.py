@@ -104,7 +104,7 @@ def build_block(user_sources) -> str:
 
 def patch_makefile(project_root: Path, user_sources, dry_run: bool) -> bool:
     mk = project_root / "makefile"
-    text = mk.read_text()
+    text = mk.read_text(encoding="utf-8")  # campagne 2026-11-08: not the cp1252 default
     block = build_block(user_sources)
 
     existing = re.compile(
@@ -135,7 +135,7 @@ def patch_makefile(project_root: Path, user_sources, dry_run: bool) -> bool:
         return True
 
     shutil.copy2(mk, mk.with_suffix(".bak"))
-    mk.write_text(new_text)
+    mk.write_text(new_text, encoding="utf-8")
     print(f"makefile patched (backup at {mk.with_suffix('.bak').name}).")
     return True
 
@@ -176,6 +176,11 @@ def main():
     print()
     print("Patching makefile:")
     user_sources = discover_user_sources(args.project_root)
+    if args.dry_run:
+        # corrigé campagne 2026-11-08 : nothing was written, so add the ZIP's
+        # own src/*.c to the plan (the dry-run used to announce none).
+        user_sources = sorted(set(user_sources) | {n for n, _ in entries
+                                                   if n.endswith(".c") and n != "src/main.c"})
     if user_sources:
         print(f"  user sources to add to OBJS: {len(user_sources)}")
         for s in user_sources:

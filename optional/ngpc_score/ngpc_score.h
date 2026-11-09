@@ -14,7 +14,7 @@
  *
  * RAM:
  *   NgpcScore      : 4 bytes (u32)
- *   NgpcScoreTable : SCORE_TABLE_SIZE x 2 + 1 = 11 bytes (default)
+ *   NgpcScoreTable : SCORE_TABLE_SIZE x 2 + 1 = 11 bytes (sizeof 12 under cc900)
  *
  * Usage:
  *   Copy ngpc_score/ into src/
@@ -84,8 +84,9 @@ u16 ngpc_score_get_hi(const NgpcScore *s);
 
 /*
  * Return the u32 value as two u16 parts (8-digit display).
- *   hi_part: digits 5-8 (0..9999)
- *   lo_part: digits 1-4 (0..9999)
+ *   hi_part: digits 5-8 (0..9999) = score / 10000
+ *   lo_part: digits 1-4 (0..9999) = score % 10000
+ * Scores above 99 999 999 are shown as 99999999.
  */
 void ngpc_score_get_parts(const NgpcScore *s, u16 *hi_part, u16 *lo_part);
 

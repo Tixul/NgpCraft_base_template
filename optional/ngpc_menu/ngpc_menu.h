@@ -22,11 +22,11 @@
  *   static const char *items[] = { "JOUER", "OPTIONS", "QUITTER" };
  *   static NgpcMenu menu;
  *   ngpc_menu_init(&menu, items, 3, 1);     // wrap=1
- *   ngpc_menu_draw(&menu, PLANE_SCR1, 8, 6, '>');
+ *   ngpc_menu_draw(&menu, GFX_SCR1, 8, 6, '>');
  *
  *   // Chaque frame :
  *   u8 sel = ngpc_menu_update(&menu);
- *   if (menu.changed) ngpc_menu_draw(&menu, PLANE_SCR1, 8, 6, '>');
+ *   if (menu.changed) ngpc_menu_draw(&menu, GFX_SCR1, 8, 6, '>');
  *   if (sel != MENU_NONE) { ... action[sel] ... }
  */
 
@@ -58,7 +58,7 @@ void ngpc_menu_init(NgpcMenu *m, const char **items, u8 count, u8 wrap);
 u8 ngpc_menu_update(NgpcMenu *m);
 
 /* Dessine le menu sur la tilemap.
- *   plane  : PLANE_SCR1 ou PLANE_SCR2
+ *   plane  : GFX_SCR1 ou GFX_SCR2 (palette 0 ; tuile = code ASCII de la police systeme)
  *   tx, ty : position en tuiles du premier item
  *   cur_ch : caractère affiché devant l'item actif (ex: '>', '*') */
 void ngpc_menu_draw(const NgpcMenu *m, u8 plane, u8 tx, u8 ty, char cur_ch);
